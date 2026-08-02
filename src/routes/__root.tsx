@@ -80,13 +80,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Image to Interactive Page" },
+      { title: "Image to Interactive Page — скриншот в рабочую страницу" },
       {
         name: "description",
-        content: "Загрузите скриншот — получите работающую интерактивную HTML-страницу.",
+        content: "Загрузите скриншот сайта или макет — сервис соберёт визуально близкую HTML-страницу с работающими аккордеонами, табами, слайдерами и формами.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { property: "og:title", content: "Image to Interactive Page — скриншот в рабочую страницу" },
+      { name: "twitter:title", content: "Image to Interactive Page — скриншот в рабочую страницу" },
+      { property: "og:description", content: "Загрузите скриншот сайта или макет — сервис соберёт визуально близкую HTML-страницу с работающими аккордеонами, табами, слайдерами и формами." },
+      { name: "twitter:description", content: "Загрузите скриншот сайта или макет — сервис соберёт визуально близкую HTML-страницу с работающими аккордеонами, табами, слайдерами и формами." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/8187ddb8-1dc0-4248-95b5-5f3050de5fe9/id-preview-01a568c7--f4a4ead6-0c62-4744-baf3-701c6902c419.lovable.app-1785679282371.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/8187ddb8-1dc0-4248-95b5-5f3050de5fe9/id-preview-01a568c7--f4a4ead6-0c62-4744-baf3-701c6902c419.lovable.app-1785679282371.png" },
     ],
     links: [
       {
