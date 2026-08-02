@@ -14,7 +14,98 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      generation_logs: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          project_id: string
+          status: string
+          step: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          project_id: string
+          status: string
+          step: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          project_id?: string
+          status?: string
+          step?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_logs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          component_map: Json | null
+          created_at: string
+          device_id: string | null
+          generated_html: string | null
+          id: string
+          source_image_url: string | null
+          status: string
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          component_map?: Json | null
+          created_at?: string
+          device_id?: string | null
+          generated_html?: string | null
+          id?: string
+          source_image_url?: string | null
+          status?: string
+          title?: string
+          user_id?: string | null
+        }
+        Update: {
+          component_map?: Json | null
+          created_at?: string
+          device_id?: string | null
+          generated_html?: string | null
+          id?: string
+          source_image_url?: string | null
+          status?: string
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      usage_counters: {
+        Row: {
+          count: number
+          day: string
+          id: string
+          subject: string
+        }
+        Insert: {
+          count?: number
+          day?: string
+          id?: string
+          subject: string
+        }
+        Update: {
+          count?: number
+          day?: string
+          id?: string
+          subject?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
