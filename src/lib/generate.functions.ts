@@ -116,9 +116,7 @@ export const editPage = createServerFn({ method: "POST" })
 export const listProjects = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => z.object({ deviceId: z.string().min(1) }).parse(input))
   .handler(async ({ data }) => {
-    const { admin, optionalUserId, signedUrl, GUEST_LIMIT, USER_DAILY_LIMIT } = await import(
-      "./generate.server"
-    );
+    const { admin, optionalUserId, signedUrl } = await import("./generate.server");
     const db = admin();
     const userId = await optionalUserId();
 
@@ -126,7 +124,7 @@ export const listProjects = createServerFn({ method: "POST" })
       .from("projects")
       .select("id, title, status, source_image_url, created_at")
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(100);
 
     const { data: rows } = userId
       ? await query.eq("user_id", userId)
@@ -139,29 +137,7 @@ export const listProjects = createServerFn({ method: "POST" })
       })),
     );
 
-    let used = 0;
-    if (userId) {
-      const day = new Date().toISOString().slice(0, 10);
-      const { data: counter } = await db
-        .from("usage_counters")
-        .select("count")
-        .eq("subject", `user:${userId}`)
-        .eq("day", day)
-        .maybeSingle();
-      used = counter?.count ?? 0;
-    } else {
-      const { count } = await db
-        .from("projects")
-        .select("id", { count: "exact", head: true })
-        .is("user_id", null)
-        .eq("device_id", data.deviceId);
-      used = count ?? 0;
-    }
-
-    return {
-      projects,
-      quota: { used, limit: userId ? USER_DAILY_LIMIT : GUEST_LIMIT, signedIn: Boolean(userId) },
-    };
+    return { projects, signedIn: Boolean(userId) };
   });
 
 export const getProject = createServerFn({ method: "POST" })
