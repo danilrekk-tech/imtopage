@@ -3,8 +3,7 @@ import { getRequestHeader } from "@tanstack/react-start/server";
 
 import type { Database } from "@/integrations/supabase/types";
 
-export const GUEST_LIMIT = 3;
-export const USER_DAILY_LIMIT = 15;
+// Лимиты генераций отключены.
 
 export function admin() {
   const url = process.env["SUPABASE_URL"]!;
