@@ -45,21 +45,10 @@ export async function log(
     .insert({ project_id: projectId, step, status, error_message: errorMessage ?? null });
 }
 
-export async function assertQuota(userId: string | null, deviceId: string) {
+/** Ведёт статистику использования. Лимиты не применяются. */
+export async function trackUsage(userId: string | null) {
+  if (!userId) return;
   const db = admin();
-  if (!userId) {
-    const { count } = await db
-      .from("projects")
-      .select("id", { count: "exact", head: true })
-      .is("user_id", null)
-      .eq("device_id", deviceId);
-    if ((count ?? 0) >= GUEST_LIMIT) {
-      throw new Error(
-        `Лимит гостевого режима исчерпан (${GUEST_LIMIT} генерации). Войдите, чтобы продолжить.`,
-      );
-    }
-    return;
-  }
   const day = new Date().toISOString().slice(0, 10);
   const subject = `user:${userId}`;
   const { data: row } = await db
@@ -68,13 +57,9 @@ export async function assertQuota(userId: string | null, deviceId: string) {
     .eq("subject", subject)
     .eq("day", day)
     .maybeSingle();
-  const used = row?.count ?? 0;
-  if (used >= USER_DAILY_LIMIT) {
-    throw new Error(`Дневной лимит исчерпан (${USER_DAILY_LIMIT} генераций). Попробуйте завтра.`);
-  }
   await db
     .from("usage_counters")
-    .upsert({ subject, day, count: used + 1 }, { onConflict: "subject,day" });
+    .upsert({ subject, day, count: (row?.count ?? 0) + 1 }, { onConflict: "subject,day" });
 }
 
 export const SYSTEM_PROMPT = `Ты — эксперт по фронтенд-разработке и точному воссозданию веб-дизайна по изображению.
