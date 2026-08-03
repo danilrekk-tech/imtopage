@@ -41,9 +41,9 @@ function Projects() {
     <main className="mx-auto max-w-7xl px-4 pb-24 pt-12">
       <h1 className="text-3xl font-bold">Мои проекты</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        {query.data?.quota.signedIn
-          ? `Использовано сегодня: ${query.data.quota.used} из ${query.data.quota.limit}`
-          : `Гостевой режим: ${query.data?.quota.used ?? 0} из ${query.data?.quota.limit ?? 3} генераций`}
+        {query.data?.signedIn
+          ? "Все ваши сохранённые генерации. Лимитов нет."
+          : "Гостевой режим: проекты привязаны к этому браузеру. Лимитов нет."}
       </p>
 
       {query.isLoading ? (
