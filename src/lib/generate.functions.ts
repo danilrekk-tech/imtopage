@@ -16,12 +16,12 @@ const EditInput = z.object({
 export const generatePage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => GenerateInput.parse(input))
   .handler(async ({ data }) => {
-    const { admin, optionalUserId, assertQuota, callModel, log } = await import(
+    const { admin, optionalUserId, trackUsage, callModel, log } = await import(
       "./generate.server"
     );
     const db = admin();
     const userId = await optionalUserId();
-    await assertQuota(userId, data.deviceId);
+    await trackUsage(userId);
 
     const match = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(data.imageBase64);
     if (!match) throw new Error("Неверный формат изображения. Загрузите PNG или JPG.");
