@@ -165,9 +165,6 @@ function Index() {
           затем собирает самодостаточный HTML с реально работающими аккордеонами, табами, слайдерами
           и формами.
         </p>
-        {quotaLabel ? (
-          <p className="mt-3 text-xs text-muted-foreground">{quotaLabel}</p>
-        ) : null}
       </section>
 
       <section className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,380px)_1fr]">
