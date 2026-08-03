@@ -138,13 +138,14 @@ function Index() {
     URL.revokeObjectURL(url);
   };
 
-  const quotaLabel = useMemo(() => {
-    const q = quota.data?.quota;
-    if (!q) return null;
-    return q.signedIn
-      ? `${q.used} / ${q.limit} генераций сегодня`
-      : `${q.used} / ${q.limit} гостевых генераций`;
-  }, [quota.data]);
+  const openInNewWindow = () => {
+    if (!result) return;
+    try {
+      openHtmlInNewWindow(result.html);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось открыть окно");
+    }
+  };
 
   const busy = generate.isPending;
 
