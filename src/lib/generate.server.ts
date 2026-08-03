@@ -3,8 +3,7 @@ import { getRequestHeader } from "@tanstack/react-start/server";
 
 import type { Database } from "@/integrations/supabase/types";
 
-export const GUEST_LIMIT = 3;
-export const USER_DAILY_LIMIT = 15;
+// Лимиты генераций отключены.
 
 export function admin() {
   const url = process.env["SUPABASE_URL"]!;
@@ -35,32 +34,16 @@ export async function optionalUserId(): Promise<string | null> {
   return data.user.id;
 }
 
-export async function log(
-  projectId: string,
-  step: string,
-  status: string,
-  errorMessage?: string,
-) {
+export async function log(projectId: string, step: string, status: string, errorMessage?: string) {
   await admin()
     .from("generation_logs")
     .insert({ project_id: projectId, step, status, error_message: errorMessage ?? null });
 }
 
-export async function assertQuota(userId: string | null, deviceId: string) {
+/** Ведёт статистику использования. Лимиты не применяются. */
+export async function trackUsage(userId: string | null) {
+  if (!userId) return;
   const db = admin();
-  if (!userId) {
-    const { count } = await db
-      .from("projects")
-      .select("id", { count: "exact", head: true })
-      .is("user_id", null)
-      .eq("device_id", deviceId);
-    if ((count ?? 0) >= GUEST_LIMIT) {
-      throw new Error(
-        `Лимит гостевого режима исчерпан (${GUEST_LIMIT} генерации). Войдите, чтобы продолжить.`,
-      );
-    }
-    return;
-  }
   const day = new Date().toISOString().slice(0, 10);
   const subject = `user:${userId}`;
   const { data: row } = await db
@@ -69,13 +52,9 @@ export async function assertQuota(userId: string | null, deviceId: string) {
     .eq("subject", subject)
     .eq("day", day)
     .maybeSingle();
-  const used = row?.count ?? 0;
-  if (used >= USER_DAILY_LIMIT) {
-    throw new Error(`Дневной лимит исчерпан (${USER_DAILY_LIMIT} генераций). Попробуйте завтра.`);
-  }
   await db
     .from("usage_counters")
-    .upsert({ subject, day, count: used + 1 }, { onConflict: "subject,day" });
+    .upsert({ subject, day, count: (row?.count ?? 0) + 1 }, { onConflict: "subject,day" });
 }
 
 export const SYSTEM_PROMPT = `Ты — эксперт по фронтенд-разработке и точному воссозданию веб-дизайна по изображению.
@@ -106,9 +85,38 @@ export const SYSTEM_PROMPT = `Ты — эксперт по фронтенд-ра
 
 Затем выведи ПОЛНЫЙ финальный код внутри тегов <final_code>. Это должен быть валидный самодостаточный HTML-документ, готовый к рендеру в iframe без внешних зависимостей, кроме Tailwind CDN и Google Fonts CDN.`;
 
-type Content =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+type Content = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
+
+function extractHtml(raw: string): string {
+  const candidates = [
+    raw.match(/<final_code>([\s\S]*?)<\/final_code>/)?.[1],
+    raw.match(/```(?:html)?\s*([\s\S]*?)```/)?.[1],
+    // Крайний случай: модель вернула документ без обёртки.
+    raw.match(/<!DOCTYPE html[\s\S]*<\/html>/i)?.[0],
+    raw.match(/<html[\s\S]*<\/html>/i)?.[0],
+  ];
+  for (const candidate of candidates) {
+    const value = candidate?.trim();
+    if (value && /<\/html>|<body/i.test(value)) return value;
+  }
+  return "";
+}
+
+async function requestModel(content: Content[], key: string, temperature: number) {
+  return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Lovable-API-Key": key },
+    body: JSON.stringify({
+      model: "google/gemini-3.6-flash",
+      max_tokens: 64000,
+      temperature,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content },
+      ],
+    }),
+  });
+}
 
 export async function callModel(content: Content[]): Promise<{
   html: string;
@@ -117,48 +125,53 @@ export async function callModel(content: Content[]): Promise<{
   const key = process.env["LOVABLE_API_KEY"];
   if (!key) throw new Error("AI недоступен: отсутствует ключ шлюза.");
 
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Lovable-API-Key": key },
-    body: JSON.stringify({
-      model: "google/gemini-3.6-flash",
-      max_tokens: 32000,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content },
-      ],
-    }),
-  });
+  let lastError = "Не удалось получить ответ AI.";
+  // До трёх попыток: сетевые сбои, 5xx, 429 и пустые/невалидные ответы.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1200 * attempt));
 
-  if (!res.ok) {
-    const text = await res.text();
-    if (res.status === 429) throw new Error("Слишком много запросов к AI. Попробуйте через минуту.");
-    if (res.status === 402) throw new Error("Закончились AI-кредиты рабочего пространства.");
-    throw new Error(`Ошибка AI (${res.status}): ${text.slice(0, 300)}`);
-  }
-
-  const json = (await res.json()) as {
-    choices?: { message?: { content?: string }; finish_reason?: string }[];
-  };
-  const raw = json.choices?.[0]?.message?.content ?? "";
-  if (!raw) throw new Error("AI вернул пустой ответ. Попробуйте ещё раз.");
-
-  const analysis = raw.match(/<analysis>([\s\S]*?)<\/analysis>/)?.[1]?.trim() ?? "";
-  let html = raw.match(/<final_code>([\s\S]*?)<\/final_code>/)?.[1]?.trim() ?? "";
-  if (!html) {
-    html = raw.match(/```html\s*([\s\S]*?)```/)?.[1]?.trim() ?? "";
-  }
-  if (!html) {
-    if (json.choices?.[0]?.finish_reason === "length") {
-      throw new Error("Ответ AI не поместился в лимит токенов. Попробуйте изображение попроще.");
+    let res: Response;
+    try {
+      res = await requestModel(content, key, attempt === 0 ? 0.2 : 0.4);
+    } catch {
+      lastError = "Сеть недоступна при обращении к AI.";
+      continue;
     }
-    throw new Error("Не удалось извлечь код из ответа AI. Попробуйте ещё раз.");
+
+    if (!res.ok) {
+      const text = await res.text();
+      if (res.status === 402) throw new Error("Закончились AI-кредиты рабочего пространства.");
+      if (res.status === 429 || res.status >= 500) {
+        lastError =
+          res.status === 429
+            ? "Слишком много запросов к AI. Попробуйте через минуту."
+            : `Ошибка AI (${res.status}).`;
+        continue;
+      }
+      throw new Error(`Ошибка AI (${res.status}): ${text.slice(0, 300)}`);
+    }
+
+    const json = (await res.json()) as {
+      choices?: { message?: { content?: string }; finish_reason?: string }[];
+    };
+    const raw = json.choices?.[0]?.message?.content ?? "";
+    const analysis = raw.match(/<analysis>([\s\S]*?)<\/analysis>/)?.[1]?.trim() ?? "";
+    const html = extractHtml(raw);
+    if (html) return { html, analysis };
+
+    lastError =
+      json.choices?.[0]?.finish_reason === "length"
+        ? "Ответ AI не поместился в лимит токенов. Попробуйте изображение попроще."
+        : "Не удалось извлечь код из ответа AI.";
   }
-  return { html, analysis };
+
+  throw new Error(lastError);
 }
 
 export async function signedUrl(path: string | null): Promise<string | null> {
   if (!path) return null;
-  const { data } = await admin().storage.from("screenshots").createSignedUrl(path, 60 * 60);
+  const { data } = await admin()
+    .storage.from("screenshots")
+    .createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? null;
 }

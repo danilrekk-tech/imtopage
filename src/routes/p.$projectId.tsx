@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { Download, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Disclaimer } from "@/components/Disclaimer";
 import { getDeviceId } from "@/lib/device";
 import { editPage, getProject } from "@/lib/generate.functions";
+import { openHtmlInNewWindow } from "@/lib/preview-window";
 
 export const Route = createFileRoute("/p/$projectId")({
   head: () => ({
@@ -125,6 +126,21 @@ function ProjectView() {
               </button>
             ))}
           </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!html}
+            onClick={() => {
+              if (!html) return;
+              try {
+                openHtmlInNewWindow(html, query.data?.title ?? undefined);
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Не удалось открыть окно");
+              }
+            }}
+          >
+            <ExternalLink className="size-4" /> Открыть в новом окне
+          </Button>
           <Button variant="secondary" size="sm" onClick={download} disabled={!html}>
             <Download className="size-4" /> Скачать код
           </Button>
@@ -134,7 +150,11 @@ function ProjectView() {
       <div className={`mt-6 grid gap-4 ${view === "split" ? "lg:grid-cols-2" : "grid-cols-1"}`}>
         {view !== "result" && query.data?.image_url ? (
           <div className="panel overflow-auto p-2">
-            <img src={query.data.image_url} alt="Оригинальный макет" className="w-full rounded-lg" />
+            <img
+              src={query.data.image_url}
+              alt="Оригинальный макет"
+              className="w-full rounded-lg"
+            />
           </div>
         ) : null}
         {view !== "original" ? (

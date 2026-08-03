@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Download, Loader2, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Download, ExternalLink, Loader2, Sparkles, Upload, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Disclaimer } from "@/components/Disclaimer";
 import { getDeviceId } from "@/lib/device";
-import { editPage, generatePage, listProjects } from "@/lib/generate.functions";
+import { editPage, generatePage } from "@/lib/generate.functions";
+import { openHtmlInNewWindow } from "@/lib/preview-window";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -24,7 +25,8 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "Image to Interactive Page — скриншот в рабочую страницу" },
       {
         property: "og:description",
-        content: "Загрузите скриншот сайта или макет — сервис соберёт визуально близкую HTML-страницу с работающими аккордеонами, табами, слайдерами и формами.",
+        content:
+          "Загрузите скриншот сайта или макет — сервис соберёт визуально близкую HTML-страницу с работающими аккордеонами, табами, слайдерами и формами.",
       },
     ],
   }),
@@ -46,9 +48,11 @@ function Index() {
   const [file, setFile] = useState<{ dataUrl: string; name: string } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [step, setStep] = useState(0);
-  const [result, setResult] = useState<{ projectId: string; html: string; analysis: string } | null>(
-    null,
-  );
+  const [result, setResult] = useState<{
+    projectId: string;
+    html: string;
+    analysis: string;
+  } | null>(null);
   const [view, setView] = useState<ViewMode>("split");
   const [instruction, setInstruction] = useState("");
   const [history, setHistory] = useState<string[]>([]);
@@ -59,13 +63,6 @@ function Index() {
 
   const generateFn = useServerFn(generatePage);
   const editFn = useServerFn(editPage);
-  const listFn = useServerFn(listProjects);
-
-  const quota = useQuery({
-    queryKey: ["quota", deviceId],
-    enabled: Boolean(deviceId),
-    queryFn: () => listFn({ data: { deviceId } }),
-  });
 
   const generate = useMutation({
     mutationFn: async () => {
@@ -77,7 +74,7 @@ function Index() {
     onSuccess: (data) => {
       setResult(data);
       setStep(STEPS.length - 1);
-      queryClient.invalidateQueries({ queryKey: ["quota"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Страница готова");
     },
     onError: (error: Error) => {
@@ -138,13 +135,14 @@ function Index() {
     URL.revokeObjectURL(url);
   };
 
-  const quotaLabel = useMemo(() => {
-    const q = quota.data?.quota;
-    if (!q) return null;
-    return q.signedIn
-      ? `${q.used} / ${q.limit} генераций сегодня`
-      : `${q.used} / ${q.limit} гостевых генераций`;
-  }, [quota.data]);
+  const openInNewWindow = () => {
+    if (!result) return;
+    try {
+      openHtmlInNewWindow(result.html);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось открыть окно");
+    }
+  };
 
   const busy = generate.isPending;
 
@@ -156,17 +154,13 @@ function Index() {
           Скриншот → живая страница
         </span>
         <h1 className="mt-5 text-4xl font-bold sm:text-5xl">
-          Превратите картинку в{" "}
-          <span className="text-primary">рабочую интерактивную страницу</span>
+          Превратите картинку в <span className="text-primary">рабочую интерактивную страницу</span>
         </h1>
         <p className="mt-4 text-base text-muted-foreground">
-          Загрузите скриншот сайта или дизайн-макет. Сервис распознаёт блоки, палитру и компоненты, а
-          затем собирает самодостаточный HTML с реально работающими аккордеонами, табами, слайдерами
-          и формами.
+          Загрузите скриншот сайта или дизайн-макет. Сервис распознаёт блоки, палитру и компоненты,
+          а затем собирает самодостаточный HTML с реально работающими аккордеонами, табами,
+          слайдерами и формами.
         </p>
-        {quotaLabel ? (
-          <p className="mt-3 text-xs text-muted-foreground">{quotaLabel}</p>
-        ) : null}
       </section>
 
       <section className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,380px)_1fr]">
@@ -191,7 +185,11 @@ function Index() {
                 </button>
               </div>
               <p className="truncate text-xs text-muted-foreground">{file.name}</p>
-              <Button className="w-full" disabled={busy || !deviceId} onClick={() => generate.mutate()}>
+              <Button
+                className="w-full"
+                disabled={busy || !deviceId}
+                onClick={() => generate.mutate()}
+              >
                 {busy ? (
                   <>
                     <Loader2 className="size-4 animate-spin" /> Генерирую…
@@ -223,7 +221,9 @@ function Index() {
             >
               <Upload className="size-6 text-primary" />
               <p className="mt-3 text-sm font-medium">Перетащите PNG или JPG</p>
-              <p className="mt-1 text-xs text-muted-foreground">или нажмите, чтобы выбрать · до 10 МБ</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                или нажмите, чтобы выбрать · до 10 МБ
+              </p>
               <input
                 ref={inputRef}
                 type="file"
@@ -294,6 +294,9 @@ function Index() {
                     </button>
                   ))}
                 </div>
+                <Button variant="secondary" size="sm" onClick={openInNewWindow}>
+                  <ExternalLink className="size-4" /> Открыть в новом окне
+                </Button>
                 <Button variant="secondary" size="sm" onClick={download}>
                   <Download className="size-4" /> Скачать код
                 </Button>
