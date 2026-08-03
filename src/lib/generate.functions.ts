@@ -16,9 +16,7 @@ const EditInput = z.object({
 export const generatePage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => GenerateInput.parse(input))
   .handler(async ({ data }) => {
-    const { admin, optionalUserId, trackUsage, callModel, log } = await import(
-      "./generate.server"
-    );
+    const { admin, optionalUserId, trackUsage, callModel, log } = await import("./generate.server");
     const db = admin();
     const userId = await optionalUserId();
     await trackUsage(userId);
@@ -150,7 +148,9 @@ export const getProject = createServerFn({ method: "POST" })
     const userId = await optionalUserId();
     const { data: project } = await db
       .from("projects")
-      .select("id, title, status, generated_html, component_map, source_image_url, user_id, device_id")
+      .select(
+        "id, title, status, generated_html, component_map, source_image_url, user_id, device_id",
+      )
       .eq("id", data.id)
       .maybeSingle();
     if (!project) throw new Error("Проект не найден.");
@@ -161,8 +161,7 @@ export const getProject = createServerFn({ method: "POST" })
       title: project.title,
       status: project.status,
       html: project.generated_html,
-      analysis:
-        (project.component_map as { analysis?: string } | null)?.analysis ?? "",
+      analysis: (project.component_map as { analysis?: string } | null)?.analysis ?? "",
       image_url: await signedUrl(project.source_image_url),
     };
   });

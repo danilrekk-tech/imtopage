@@ -150,7 +150,11 @@ function ProjectView() {
       <div className={`mt-6 grid gap-4 ${view === "split" ? "lg:grid-cols-2" : "grid-cols-1"}`}>
         {view !== "result" && query.data?.image_url ? (
           <div className="panel overflow-auto p-2">
-            <img src={query.data.image_url} alt="Оригинальный макет" className="w-full rounded-lg" />
+            <img
+              src={query.data.image_url}
+              alt="Оригинальный макет"
+              className="w-full rounded-lg"
+            />
           </div>
         ) : null}
         {view !== "original" ? (

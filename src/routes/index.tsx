@@ -25,7 +25,8 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "Image to Interactive Page — скриншот в рабочую страницу" },
       {
         property: "og:description",
-        content: "Загрузите скриншот сайта или макет — сервис соберёт визуально близкую HTML-страницу с работающими аккордеонами, табами, слайдерами и формами.",
+        content:
+          "Загрузите скриншот сайта или макет — сервис соберёт визуально близкую HTML-страницу с работающими аккордеонами, табами, слайдерами и формами.",
       },
     ],
   }),
@@ -47,9 +48,11 @@ function Index() {
   const [file, setFile] = useState<{ dataUrl: string; name: string } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [step, setStep] = useState(0);
-  const [result, setResult] = useState<{ projectId: string; html: string; analysis: string } | null>(
-    null,
-  );
+  const [result, setResult] = useState<{
+    projectId: string;
+    html: string;
+    analysis: string;
+  } | null>(null);
   const [view, setView] = useState<ViewMode>("split");
   const [instruction, setInstruction] = useState("");
   const [history, setHistory] = useState<string[]>([]);
@@ -151,13 +154,12 @@ function Index() {
           Скриншот → живая страница
         </span>
         <h1 className="mt-5 text-4xl font-bold sm:text-5xl">
-          Превратите картинку в{" "}
-          <span className="text-primary">рабочую интерактивную страницу</span>
+          Превратите картинку в <span className="text-primary">рабочую интерактивную страницу</span>
         </h1>
         <p className="mt-4 text-base text-muted-foreground">
-          Загрузите скриншот сайта или дизайн-макет. Сервис распознаёт блоки, палитру и компоненты, а
-          затем собирает самодостаточный HTML с реально работающими аккордеонами, табами, слайдерами
-          и формами.
+          Загрузите скриншот сайта или дизайн-макет. Сервис распознаёт блоки, палитру и компоненты,
+          а затем собирает самодостаточный HTML с реально работающими аккордеонами, табами,
+          слайдерами и формами.
         </p>
       </section>
 
@@ -183,7 +185,11 @@ function Index() {
                 </button>
               </div>
               <p className="truncate text-xs text-muted-foreground">{file.name}</p>
-              <Button className="w-full" disabled={busy || !deviceId} onClick={() => generate.mutate()}>
+              <Button
+                className="w-full"
+                disabled={busy || !deviceId}
+                onClick={() => generate.mutate()}
+              >
                 {busy ? (
                   <>
                     <Loader2 className="size-4 animate-spin" /> Генерирую…
@@ -215,7 +221,9 @@ function Index() {
             >
               <Upload className="size-6 text-primary" />
               <p className="mt-3 text-sm font-medium">Перетащите PNG или JPG</p>
-              <p className="mt-1 text-xs text-muted-foreground">или нажмите, чтобы выбрать · до 10 МБ</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                или нажмите, чтобы выбрать · до 10 МБ
+              </p>
               <input
                 ref={inputRef}
                 type="file"

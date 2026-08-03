@@ -34,12 +34,7 @@ export async function optionalUserId(): Promise<string | null> {
   return data.user.id;
 }
 
-export async function log(
-  projectId: string,
-  step: string,
-  status: string,
-  errorMessage?: string,
-) {
+export async function log(projectId: string, step: string, status: string, errorMessage?: string) {
   await admin()
     .from("generation_logs")
     .insert({ project_id: projectId, step, status, error_message: errorMessage ?? null });
@@ -90,9 +85,7 @@ export const SYSTEM_PROMPT = `Ты — эксперт по фронтенд-ра
 
 Затем выведи ПОЛНЫЙ финальный код внутри тегов <final_code>. Это должен быть валидный самодостаточный HTML-документ, готовый к рендеру в iframe без внешних зависимостей, кроме Tailwind CDN и Google Fonts CDN.`;
 
-type Content =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+type Content = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
 function extractHtml(raw: string): string {
   const candidates = [
@@ -177,6 +170,8 @@ export async function callModel(content: Content[]): Promise<{
 
 export async function signedUrl(path: string | null): Promise<string | null> {
   if (!path) return null;
-  const { data } = await admin().storage.from("screenshots").createSignedUrl(path, 60 * 60);
+  const { data } = await admin()
+    .storage.from("screenshots")
+    .createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? null;
 }
