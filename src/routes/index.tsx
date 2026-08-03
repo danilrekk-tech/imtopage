@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Download, Loader2, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Download, ExternalLink, Loader2, Sparkles, Upload, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Disclaimer } from "@/components/Disclaimer";
 import { getDeviceId } from "@/lib/device";
-import { editPage, generatePage, listProjects } from "@/lib/generate.functions";
+import { editPage, generatePage } from "@/lib/generate.functions";
+import { openHtmlInNewWindow } from "@/lib/preview-window";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -59,13 +60,6 @@ function Index() {
 
   const generateFn = useServerFn(generatePage);
   const editFn = useServerFn(editPage);
-  const listFn = useServerFn(listProjects);
-
-  const quota = useQuery({
-    queryKey: ["quota", deviceId],
-    enabled: Boolean(deviceId),
-    queryFn: () => listFn({ data: { deviceId } }),
-  });
 
   const generate = useMutation({
     mutationFn: async () => {
@@ -77,7 +71,7 @@ function Index() {
     onSuccess: (data) => {
       setResult(data);
       setStep(STEPS.length - 1);
-      queryClient.invalidateQueries({ queryKey: ["quota"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Страница готова");
     },
     onError: (error: Error) => {
@@ -292,6 +286,9 @@ function Index() {
                     </button>
                   ))}
                 </div>
+                <Button variant="secondary" size="sm" onClick={openInNewWindow}>
+                  <ExternalLink className="size-4" /> Открыть в новом окне
+                </Button>
                 <Button variant="secondary" size="sm" onClick={download}>
                   <Download className="size-4" /> Скачать код
                 </Button>
