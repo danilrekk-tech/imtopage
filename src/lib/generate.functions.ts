@@ -109,7 +109,6 @@ export const generatePage = createServerFn({ method: "POST" })
     }
   });
 
-
 export const editPage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => EditInput.parse(input))
   .handler(async ({ data }) => {
@@ -145,7 +144,6 @@ export const editPage = createServerFn({ method: "POST" })
         .eq("id", project.id);
       await log(project.id, "edit", "completed", provider);
       return { html, analysis, provider };
-
     } catch (error) {
       const message = error instanceof Error ? error.message : "Неизвестная ошибка";
       await log(project.id, "edit", "failed", message);

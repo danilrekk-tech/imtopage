@@ -170,7 +170,8 @@ async function callGemini(content: Content[]): Promise<{ html: string; analysis:
 
   if (!res.ok) {
     const text = (await res.text()).slice(0, 300);
-    const retryable = res.status === 429 || res.status === 402 || res.status === 403 || res.status >= 500;
+    const retryable =
+      res.status === 429 || res.status === 402 || res.status === 403 || res.status >= 500;
     throw new ProviderError(`Gemini ошибка ${res.status}: ${text}`, retryable);
   }
 
@@ -364,7 +365,10 @@ export async function saveCache(
 ) {
   await admin()
     .from("generation_cache")
-    .upsert({ image_hash: imageHash, result: html, analysis, provider }, { onConflict: "image_hash" });
+    .upsert(
+      { image_hash: imageHash, result: html, analysis, provider },
+      { onConflict: "image_hash" },
+    );
 }
 
 /* ============================== Rate limit ===============================*/
@@ -381,9 +385,7 @@ export async function assertRateLimit(subject: string) {
     .eq("subject", subject)
     .gte("created_at", since);
   if ((count ?? 0) >= RATE_LIMIT_PER_HOUR) {
-    throw new Error(
-      `Слишком много генераций (${RATE_LIMIT_PER_HOUR} в час). Попробуйте позже.`,
-    );
+    throw new Error(`Слишком много генераций (${RATE_LIMIT_PER_HOUR} в час). Попробуйте позже.`);
   }
   await db.from("rate_limit_events").insert({ subject });
 }
@@ -404,4 +406,3 @@ export async function signedUrl(path: string | null): Promise<string | null> {
     .createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? null;
 }
-
