@@ -129,7 +129,7 @@ export const editPage = createServerFn({ method: "POST" })
 
     await log(project.id, "edit", "started");
     try {
-      const { html, analysis } = await callModel([
+      const { html, analysis, provider } = await callModel([
         {
           type: "text",
           text: `edit_instruction: ${data.instruction}\n\nprevious_html:\n${project.generated_html}`,
@@ -137,10 +137,15 @@ export const editPage = createServerFn({ method: "POST" })
       ]);
       await db
         .from("projects")
-        .update({ generated_html: html, component_map: { analysis }, status: "completed" })
+        .update({
+          generated_html: html,
+          component_map: { analysis, provider },
+          status: "completed",
+        })
         .eq("id", project.id);
-      await log(project.id, "edit", "completed");
-      return { html, analysis };
+      await log(project.id, "edit", "completed", provider);
+      return { html, analysis, provider };
+
     } catch (error) {
       const message = error instanceof Error ? error.message : "Неизвестная ошибка";
       await log(project.id, "edit", "failed", message);
