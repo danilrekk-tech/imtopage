@@ -102,6 +102,125 @@ function extractHtml(raw: string): string {
   return "";
 }
 
+/* ============================================================================
+ * Цепочка AI-провайдеров.
+ * Приоритет (режим "auto"): Gemini → OpenRouter (free vision) → Lovable AI.
+ * Режим задаётся переменной окружения AI_PROVIDER_MODE.
+ * ==========================================================================*/
+
+export type ProviderName = "gemini" | "openrouter_fallback" | "lovable_fallback" | "cache";
+export type ProviderMode = "auto" | "gemini_only" | "lovable_only";
+
+export function providerMode(): ProviderMode {
+  const raw = (process.env["AI_PROVIDER_MODE"] ?? "auto").trim().toLowerCase();
+  return raw === "gemini_only" || raw === "lovable_only" ? raw : "auto";
+}
+
+const GEMINI_MODEL = "gemini-2.5-flash";
+// Бесплатные vision-модели OpenRouter (проверяются по порядку).
+const OPENROUTER_MODELS = [
+  "google/gemini-2.0-flash-exp:free",
+  "qwen/qwen2.5-vl-72b-instruct:free",
+  "meta-llama/llama-3.2-11b-vision-instruct:free",
+];
+
+class ProviderError extends Error {
+  retryable: boolean;
+  constructor(message: string, retryable: boolean) {
+    super(message);
+    this.retryable = retryable;
+  }
+}
+
+function parseResult(raw: string): { html: string; analysis: string } | null {
+  const analysis = raw.match(/<analysis>([\s\S]*?)<\/analysis>/)?.[1]?.trim() ?? "";
+  const html = extractHtml(raw);
+  return html ? { html, analysis } : null;
+}
+
+/** 1) Прямой вызов Google Gemini API (vision). */
+async function callGemini(content: Content[]): Promise<{ html: string; analysis: string }> {
+  const key = process.env["GEMINI_API_KEY"];
+  if (!key) throw new ProviderError("GEMINI_API_KEY не задан.", true);
+
+  const parts = content.map((item) => {
+    if (item.type === "text") return { text: item.text };
+    const match = /^data:(.+?);base64,(.+)$/.exec(item.image_url.url);
+    if (!match) throw new ProviderError("Gemini принимает только base64-изображения.", true);
+    return { inlineData: { mimeType: match[1]!, data: match[2]! } };
+  });
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: [{ role: "user", parts }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 64000 },
+        }),
+      },
+    );
+  } catch {
+    throw new ProviderError("Gemini недоступен (сеть/таймаут).", true);
+  }
+
+  if (!res.ok) {
+    const text = (await res.text()).slice(0, 300);
+    const retryable = res.status === 429 || res.status === 402 || res.status === 403 || res.status >= 500;
+    throw new ProviderError(`Gemini ошибка ${res.status}: ${text}`, retryable);
+  }
+
+  const json = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  const raw = (json.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
+  const parsed = parseResult(raw);
+  if (!parsed) throw new ProviderError("Gemini вернул ответ без HTML.", true);
+  return parsed;
+}
+
+/** 2) OpenRouter (бесплатные vision-модели). */
+async function callOpenRouter(content: Content[]): Promise<{ html: string; analysis: string }> {
+  const key = process.env["OPENROUTER_API_KEY"];
+  if (!key) throw new ProviderError("OPENROUTER_API_KEY не задан.", true);
+
+  let lastError = "OpenRouter недоступен.";
+  for (const model of OPENROUTER_MODELS) {
+    let res: Response;
+    try {
+      res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model,
+          max_tokens: 64000,
+          temperature: 0.2,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content },
+          ],
+        }),
+      });
+    } catch {
+      lastError = "OpenRouter недоступен (сеть/таймаут).";
+      continue;
+    }
+    if (!res.ok) {
+      lastError = `OpenRouter ошибка ${res.status}: ${(await res.text()).slice(0, 200)}`;
+      continue;
+    }
+    const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const parsed = parseResult(json.choices?.[0]?.message?.content ?? "");
+    if (parsed) return parsed;
+    lastError = `OpenRouter (${model}) вернул ответ без HTML.`;
+  }
+  throw new ProviderError(lastError, true);
+}
+
 async function requestModel(content: Content[], key: string, temperature: number) {
   return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -118,12 +237,13 @@ async function requestModel(content: Content[], key: string, temperature: number
   });
 }
 
-export async function callModel(content: Content[]): Promise<{
+/** 3) Встроенный AI-коннектор Lovable (LOVABLE_API_KEY) — прежняя реализация. */
+export async function callLovable(content: Content[]): Promise<{
   html: string;
   analysis: string;
 }> {
   const key = process.env["LOVABLE_API_KEY"];
-  if (!key) throw new Error("AI недоступен: отсутствует ключ шлюза.");
+  if (!key) throw new ProviderError("AI недоступен: отсутствует ключ шлюза Lovable.", false);
 
   let lastError = "Не удалось получить ответ AI.";
   // До трёх попыток: сетевые сбои, 5xx, 429 и пустые/невалидные ответы.
@@ -155,9 +275,8 @@ export async function callModel(content: Content[]): Promise<{
       choices?: { message?: { content?: string }; finish_reason?: string }[];
     };
     const raw = json.choices?.[0]?.message?.content ?? "";
-    const analysis = raw.match(/<analysis>([\s\S]*?)<\/analysis>/)?.[1]?.trim() ?? "";
-    const html = extractHtml(raw);
-    if (html) return { html, analysis };
+    const parsed = parseResult(raw);
+    if (parsed) return parsed;
 
     lastError =
       json.choices?.[0]?.finish_reason === "length"
@@ -168,6 +287,116 @@ export async function callModel(content: Content[]): Promise<{
   throw new Error(lastError);
 }
 
+/** Единая точка вызова AI: цепочка провайдеров согласно AI_PROVIDER_MODE. */
+export async function callModel(content: Content[]): Promise<{
+  html: string;
+  analysis: string;
+  provider: ProviderName;
+}> {
+  const mode = providerMode();
+
+  if (mode === "lovable_only") {
+    const result = await callLovable(content);
+    console.info("[ai-provider] lovable_fallback (lovable_only)");
+    return { ...result, provider: "lovable_fallback" };
+  }
+
+  const errors: string[] = [];
+
+  try {
+    const result = await callGemini(content);
+    console.info("[ai-provider] gemini");
+    return { ...result, provider: "gemini" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Gemini недоступен.";
+    console.warn("[ai-provider] gemini failed:", message);
+    errors.push(message);
+    if (mode === "gemini_only" || (error instanceof ProviderError && !error.retryable)) {
+      throw new Error(errors.join(" | "));
+    }
+  }
+
+  try {
+    const result = await callOpenRouter(content);
+    console.info("[ai-provider] openrouter_fallback");
+    return { ...result, provider: "openrouter_fallback" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "OpenRouter недоступен.";
+    console.warn("[ai-provider] openrouter failed:", message);
+    errors.push(message);
+  }
+
+  try {
+    const result = await callLovable(content);
+    console.info("[ai-provider] lovable_fallback");
+    return { ...result, provider: "lovable_fallback" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Lovable AI недоступен.";
+    console.warn("[ai-provider] lovable failed:", message);
+    errors.push(message);
+    throw new Error(errors.join(" | "));
+  }
+}
+
+/* ============================ Кеш по SHA-256 =============================*/
+
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const buffer = await crypto.subtle.digest("SHA-256", bytes as unknown as ArrayBuffer);
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export async function getCached(imageHash: string) {
+  const { data } = await admin()
+    .from("generation_cache")
+    .select("result, analysis, provider")
+    .eq("image_hash", imageHash)
+    .maybeSingle();
+  return data ?? null;
+}
+
+export async function saveCache(
+  imageHash: string,
+  html: string,
+  analysis: string,
+  provider: string,
+) {
+  await admin()
+    .from("generation_cache")
+    .upsert({ image_hash: imageHash, result: html, analysis, provider }, { onConflict: "image_hash" });
+}
+
+/* ============================== Rate limit ===============================*/
+
+const RATE_LIMIT_PER_HOUR = Number(process.env["RATE_LIMIT_PER_HOUR"] ?? 20);
+
+/** Не больше N генераций в час на пользователя/устройство/IP. */
+export async function assertRateLimit(subject: string) {
+  const db = admin();
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count } = await db
+    .from("rate_limit_events")
+    .select("id", { count: "exact", head: true })
+    .eq("subject", subject)
+    .gte("created_at", since);
+  if ((count ?? 0) >= RATE_LIMIT_PER_HOUR) {
+    throw new Error(
+      `Слишком много генераций (${RATE_LIMIT_PER_HOUR} в час). Попробуйте позже.`,
+    );
+  }
+  await db.from("rate_limit_events").insert({ subject });
+}
+
+export function requestSubject(userId: string | null, deviceId: string): string {
+  if (userId) return `user:${userId}`;
+  const ip =
+    getRequestHeader("cf-connecting-ip") ??
+    getRequestHeader("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "unknown";
+  return `guest:${deviceId}:${ip}`;
+}
+
 export async function signedUrl(path: string | null): Promise<string | null> {
   if (!path) return null;
   const { data } = await admin()
@@ -175,3 +404,4 @@ export async function signedUrl(path: string | null): Promise<string | null> {
     .createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? null;
 }
+
