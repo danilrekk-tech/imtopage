@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      generation_cache: {
+        Row: {
+          analysis: string | null
+          created_at: string
+          image_hash: string
+          provider: string
+          result: string
+        }
+        Insert: {
+          analysis?: string | null
+          created_at?: string
+          image_hash: string
+          provider: string
+          result: string
+        }
+        Update: {
+          analysis?: string | null
+          created_at?: string
+          image_hash?: string
+          provider?: string
+          result?: string
+        }
+        Relationships: []
+      }
       generation_logs: {
         Row: {
           created_at: string
@@ -82,6 +106,24 @@ export type Database = {
           status?: string
           title?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      rate_limit_events: {
+        Row: {
+          created_at: string
+          id: string
+          subject: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          subject: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          subject?: string
         }
         Relationships: []
       }
