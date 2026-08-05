@@ -16,9 +16,21 @@ const EditInput = z.object({
 export const generatePage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => GenerateInput.parse(input))
   .handler(async ({ data }) => {
-    const { admin, optionalUserId, trackUsage, callModel, log } = await import("./generate.server");
+    const {
+      admin,
+      optionalUserId,
+      trackUsage,
+      callModel,
+      log,
+      sha256Hex,
+      getCached,
+      saveCache,
+      assertRateLimit,
+      requestSubject,
+    } = await import("./generate.server");
     const db = admin();
     const userId = await optionalUserId();
+    await assertRateLimit(requestSubject(userId, data.deviceId));
     await trackUsage(userId);
 
     const match = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(data.imageBase64);
@@ -26,6 +38,8 @@ export const generatePage = createServerFn({ method: "POST" })
     const mime = match[1]!;
     const bytes = Uint8Array.from(atob(match[2]!), (c) => c.charCodeAt(0));
     if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("Файл больше 10 МБ.");
+
+    const imageHash = await sha256Hex(bytes);
 
     const ext = mime.split("/")[1] === "jpeg" ? "jpg" : (mime.split("/")[1] ?? "png");
     const path = `${userId ?? `guest/${data.deviceId}`}/${crypto.randomUUID()}.${ext}`;
@@ -46,9 +60,30 @@ export const generatePage = createServerFn({ method: "POST" })
 
     await log(project.id, "upload", "completed");
 
+    // Кеш по SHA-256 хешу изображения — без вызова AI.
+    const cached = await getCached(imageHash);
+    if (cached) {
+      await db
+        .from("projects")
+        .update({
+          generated_html: cached.result,
+          component_map: { analysis: cached.analysis ?? "", provider: "cache" },
+          status: "completed",
+        })
+        .eq("id", project.id);
+      await log(project.id, "generate", "completed", `cache (${cached.provider})`);
+      console.info("[ai-provider] cache hit", imageHash.slice(0, 12));
+      return {
+        projectId: project.id,
+        html: cached.result,
+        analysis: cached.analysis ?? "",
+        provider: "cache" as const,
+      };
+    }
+
     try {
       await log(project.id, "analyze", "started");
-      const { html, analysis } = await callModel([
+      const { html, analysis, provider } = await callModel([
         {
           type: "text",
           text: "Воссоздай эту страницу как интерактивный HTML-документ по правилам из системного промта.",
@@ -59,12 +94,13 @@ export const generatePage = createServerFn({ method: "POST" })
         .from("projects")
         .update({
           generated_html: html,
-          component_map: { analysis },
+          component_map: { analysis, provider },
           status: "completed",
         })
         .eq("id", project.id);
-      await log(project.id, "generate", "completed");
-      return { projectId: project.id, html, analysis };
+      await saveCache(imageHash, html, analysis, provider);
+      await log(project.id, "generate", "completed", provider);
+      return { projectId: project.id, html, analysis, provider };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Неизвестная ошибка";
       await db.from("projects").update({ status: "failed" }).eq("id", project.id);
@@ -72,6 +108,7 @@ export const generatePage = createServerFn({ method: "POST" })
       throw new Error(message);
     }
   });
+
 
 export const editPage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => EditInput.parse(input))
