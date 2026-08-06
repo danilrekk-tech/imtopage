@@ -50,17 +50,28 @@ export const generatePage = createServerFn({ method: "POST" })
     await assertRateLimit(requestSubject(userId, data.deviceId));
     await trackUsage(userId);
 
-    const match = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(data.imageBase64);
-    if (!match) throw new Error("Неверный формат изображения. Загрузите PNG или JPG.");
-    const mime = match[1]!;
-    const bytes = Uint8Array.from(atob(match[2]!), (c) => c.charCodeAt(0));
-    if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("Файл больше 10 МБ.");
+    const parsedImages = data.images.map((raw) => {
+      const match = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(raw);
+      if (!match) throw new Error("Неверный формат изображения. Загрузите PNG или JPG.");
+      const mime = match[1]!;
+      const bytes = Uint8Array.from(atob(match[2]!), (c) => c.charCodeAt(0));
+      if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("Файл больше 10 МБ.");
+      return { raw, mime, bytes };
+    });
+    const first = parsedImages[0]!;
 
-    const imageHash = await sha256Hex(bytes);
+    const optionsKey = JSON.stringify(data.options);
+    const hashSource = new TextEncoder().encode(
+      optionsKey + (await Promise.all(parsedImages.map((img) => sha256Hex(img.bytes)))).join("|"),
+    );
+    const imageHash = await sha256Hex(hashSource);
 
-    const ext = mime.split("/")[1] === "jpeg" ? "jpg" : (mime.split("/")[1] ?? "png");
+    const ext = first.mime.split("/")[1] === "jpeg" ? "jpg" : (first.mime.split("/")[1] ?? "png");
     const path = `${userId ?? `guest/${data.deviceId}`}/${crypto.randomUUID()}.${ext}`;
-    await db.storage.from("screenshots").upload(path, bytes, { contentType: mime });
+    await db.storage
+      .from("screenshots")
+      .upload(path, first.bytes, { contentType: first.mime });
+
 
     const { data: project, error: insertError } = await db
       .from("projects")
