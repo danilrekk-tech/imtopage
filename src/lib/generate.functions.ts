@@ -1,10 +1,26 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import {
+  buildOptionsDirective,
+  DEFAULT_OPTIONS,
+  type GenerationOptions,
+} from "./generation-options";
+
+const OptionsSchema = z.object({
+  framework: z.enum(["html", "react", "vue"]).default("html"),
+  primaryColor: z.string().min(3).max(32).default(DEFAULT_OPTIONS.primaryColor),
+  fontFamily: z.enum(["Inter", "Roboto", "Plus Jakarta Sans", "Outfit"]).default("Inter"),
+  radius: z.enum(["sm", "md", "lg", "full"]).default("md"),
+  enhanceText: z.boolean().default(false),
+  themeToggle: z.boolean().default(true),
+});
+
 const GenerateInput = z.object({
-  imageBase64: z.string().min(50),
+  images: z.array(z.string().min(50)).min(1).max(3),
   fileName: z.string().default("screenshot.png"),
   deviceId: z.string().min(1),
+  options: OptionsSchema.default(DEFAULT_OPTIONS),
 });
 
 const EditInput = z.object({
@@ -33,17 +49,25 @@ export const generatePage = createServerFn({ method: "POST" })
     await assertRateLimit(requestSubject(userId, data.deviceId));
     await trackUsage(userId);
 
-    const match = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(data.imageBase64);
-    if (!match) throw new Error("Неверный формат изображения. Загрузите PNG или JPG.");
-    const mime = match[1]!;
-    const bytes = Uint8Array.from(atob(match[2]!), (c) => c.charCodeAt(0));
-    if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("Файл больше 10 МБ.");
+    const parsedImages = data.images.map((raw) => {
+      const match = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(raw);
+      if (!match) throw new Error("Неверный формат изображения. Загрузите PNG или JPG.");
+      const mime = match[1]!;
+      const bytes = Uint8Array.from(atob(match[2]!), (c) => c.charCodeAt(0));
+      if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("Файл больше 10 МБ.");
+      return { raw, mime, bytes };
+    });
+    const first = parsedImages[0]!;
 
-    const imageHash = await sha256Hex(bytes);
+    const optionsKey = JSON.stringify(data.options);
+    const hashSource = new TextEncoder().encode(
+      optionsKey + (await Promise.all(parsedImages.map((img) => sha256Hex(img.bytes)))).join("|"),
+    );
+    const imageHash = await sha256Hex(hashSource);
 
-    const ext = mime.split("/")[1] === "jpeg" ? "jpg" : (mime.split("/")[1] ?? "png");
+    const ext = first.mime.split("/")[1] === "jpeg" ? "jpg" : (first.mime.split("/")[1] ?? "png");
     const path = `${userId ?? `guest/${data.deviceId}`}/${crypto.randomUUID()}.${ext}`;
-    await db.storage.from("screenshots").upload(path, bytes, { contentType: mime });
+    await db.storage.from("screenshots").upload(path, first.bytes, { contentType: first.mime });
 
     const { data: project, error: insertError } = await db
       .from("projects")
@@ -86,10 +110,13 @@ export const generatePage = createServerFn({ method: "POST" })
       const { html, analysis, provider } = await callModel([
         {
           type: "text",
-          text: "Воссоздай эту страницу как интерактивный HTML-документ по правилам из системного промта.",
+          text:
+            `Воссоздай ${parsedImages.length > 1 ? "эти экраны" : "эту страницу"} как интерактивный HTML-документ по правилам из системного промта.` +
+            buildOptionsDirective(data.options as GenerationOptions, parsedImages.length),
         },
-        { type: "image_url", image_url: { url: data.imageBase64 } },
+        ...parsedImages.map((img) => ({ type: "image_url" as const, image_url: { url: img.raw } })),
       ]);
+
       await db
         .from("projects")
         .update({
