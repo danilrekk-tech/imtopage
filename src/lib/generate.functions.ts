@@ -1,10 +1,26 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+import {
+  buildOptionsDirective,
+  DEFAULT_OPTIONS,
+  type GenerationOptions,
+} from "./generation-options";
+
+const OptionsSchema = z.object({
+  framework: z.enum(["html", "react", "vue"]).default("html"),
+  primaryColor: z.string().min(3).max(32).default(DEFAULT_OPTIONS.primaryColor),
+  fontFamily: z.enum(["Inter", "Roboto", "Plus Jakarta Sans", "Outfit"]).default("Inter"),
+  radius: z.enum(["sm", "md", "lg", "full"]).default("md"),
+  enhanceText: z.boolean().default(false),
+  themeToggle: z.boolean().default(true),
+});
+
 const GenerateInput = z.object({
-  imageBase64: z.string().min(50),
+  images: z.array(z.string().min(50)).min(1).max(3),
   fileName: z.string().default("screenshot.png"),
   deviceId: z.string().min(1),
+  options: OptionsSchema.default(DEFAULT_OPTIONS),
 });
 
 const EditInput = z.object({
@@ -12,6 +28,7 @@ const EditInput = z.object({
   instruction: z.string().min(2).max(2000),
   deviceId: z.string().min(1),
 });
+
 
 export const generatePage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => GenerateInput.parse(input))
