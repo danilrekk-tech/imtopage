@@ -78,7 +78,5 @@ const SCRIPT = (mode: "inspect" | "copy") => `
 export function withPreviewTools(html: string, mode: PreviewMode): string {
   if (mode === "off") return html;
   const script = SCRIPT(mode);
-  return html.includes("</body>")
-    ? html.replace(/<\/body>/i, `${script}</body>`)
-    : html + script;
+  return html.includes("</body>") ? html.replace(/<\/body>/i, `${script}</body>`) : html + script;
 }

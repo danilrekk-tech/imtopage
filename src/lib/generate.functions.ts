@@ -29,7 +29,6 @@ const EditInput = z.object({
   deviceId: z.string().min(1),
 });
 
-
 export const generatePage = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => GenerateInput.parse(input))
   .handler(async ({ data }) => {
@@ -68,10 +67,7 @@ export const generatePage = createServerFn({ method: "POST" })
 
     const ext = first.mime.split("/")[1] === "jpeg" ? "jpg" : (first.mime.split("/")[1] ?? "png");
     const path = `${userId ?? `guest/${data.deviceId}`}/${crypto.randomUUID()}.${ext}`;
-    await db.storage
-      .from("screenshots")
-      .upload(path, first.bytes, { contentType: first.mime });
-
+    await db.storage.from("screenshots").upload(path, first.bytes, { contentType: first.mime });
 
     const { data: project, error: insertError } = await db
       .from("projects")
@@ -118,9 +114,7 @@ export const generatePage = createServerFn({ method: "POST" })
             `Воссоздай ${parsedImages.length > 1 ? "эти экраны" : "эту страницу"} как интерактивный HTML-документ по правилам из системного промта.` +
             buildOptionsDirective(data.options as GenerationOptions, parsedImages.length),
         },
-        ...parsedImages.map(
-          (img) => ({ type: "image_url" as const, image_url: { url: img.raw } }),
-        ),
+        ...parsedImages.map((img) => ({ type: "image_url" as const, image_url: { url: img.raw } })),
       ]);
 
       await db

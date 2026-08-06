@@ -272,9 +272,7 @@ function Index() {
             >
               <Upload className="size-6 text-primary" />
               <p className="mt-3 text-sm font-medium">Перетащите до 3 изображений</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                PNG, JPG, WEBP · до 10 МБ каждое
-              </p>
+              <p className="mt-1 text-xs text-muted-foreground">PNG, JPG, WEBP · до 10 МБ каждое</p>
             </div>
           )}
 
@@ -412,7 +410,9 @@ function Index() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-60">
-                    <DropdownMenuItem onClick={() => downloadZip(result.html, options.framework, title)}>
+                    <DropdownMenuItem
+                      onClick={() => downloadZip(result.html, options.framework, title)}
+                    >
                       <FileArchive className="size-4" /> Скачать ZIP
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => downloadHtml(result.html, title)}>
@@ -475,9 +475,7 @@ function Index() {
                   <PreviewFrame
                     html={result.html}
                     mode={previewMode}
-                    onHtmlChange={(html) =>
-                      setResult((prev) => (prev ? { ...prev, html } : prev))
-                    }
+                    onHtmlChange={(html) => setResult((prev) => (prev ? { ...prev, html } : prev))}
                   />
                 </div>
               )}
