@@ -114,10 +114,15 @@ export const generatePage = createServerFn({ method: "POST" })
       const { html, analysis, provider } = await callModel([
         {
           type: "text",
-          text: "Воссоздай эту страницу как интерактивный HTML-документ по правилам из системного промта.",
+          text:
+            `Воссоздай ${parsedImages.length > 1 ? "эти экраны" : "эту страницу"} как интерактивный HTML-документ по правилам из системного промта.` +
+            buildOptionsDirective(data.options as GenerationOptions, parsedImages.length),
         },
-        { type: "image_url", image_url: { url: data.imageBase64 } },
+        ...parsedImages.map(
+          (img) => ({ type: "image_url" as const, image_url: { url: img.raw } }),
+        ),
       ]);
+
       await db
         .from("projects")
         .update({
