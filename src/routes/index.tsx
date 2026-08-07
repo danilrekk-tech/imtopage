@@ -31,12 +31,16 @@ import { Disclaimer } from "@/components/Disclaimer";
 import { CompareSlider } from "@/components/CompareSlider";
 import { GenerationOptionsPanel } from "@/components/GenerationOptionsPanel";
 import { PreviewFrame } from "@/components/PreviewFrame";
+import { A11yPanel } from "@/components/A11yPanel";
+import { ShareDialog } from "@/components/ShareDialog";
 import { getDeviceId } from "@/lib/device";
 import { editPage, generatePage } from "@/lib/generate.functions";
 import { DEFAULT_OPTIONS, type GenerationOptions } from "@/lib/generation-options";
 import { downloadHtml, downloadZip, openInCodeSandbox } from "@/lib/export-tools";
+import type { A11yReport } from "@/lib/a11y-audit";
 import type { PreviewMode } from "@/lib/preview-inject";
 import { openHtmlInNewWindow } from "@/lib/preview-window";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
