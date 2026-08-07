@@ -1,22 +1,42 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 
+import type { A11yReport } from "@/lib/a11y-audit";
 import { withPreviewTools, type PreviewMode } from "@/lib/preview-inject";
 
 type Props = {
   html: string;
   mode: PreviewMode;
   onHtmlChange: (html: string) => void;
+  /** Увеличьте значение, чтобы запустить проверку доступности внутри превью. */
+  auditRequest?: number;
+  onAuditReport?: (report: A11yReport) => void;
   className?: string;
 };
 
-export function PreviewFrame({ html, mode, onHtmlChange, className }: Props) {
+export function PreviewFrame({
+  html,
+  mode,
+  onHtmlChange,
+  auditRequest = 0,
+  onAuditReport,
+  className,
+}: Props) {
   const srcDoc = useMemo(() => withPreviewTools(html, mode), [html, mode]);
+  const frameRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
-      const payload = event.data as { __ip?: string; html?: string } | null;
-      if (!payload?.__ip || typeof payload.html !== "string") return;
+      const payload = event.data as
+        | { __ip?: string; html?: string; report?: A11yReport }
+        | null
+        | undefined;
+      if (!payload?.__ip) return;
+      if (payload.__ip === "a11y" && payload.report) {
+        onAuditReport?.(payload.report);
+        return;
+      }
+      if (typeof payload.html !== "string") return;
       if (payload.__ip === "copy") {
         void navigator.clipboard
           .writeText(payload.html)
@@ -29,10 +49,19 @@ export function PreviewFrame({ html, mode, onHtmlChange, className }: Props) {
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [onHtmlChange]);
+  }, [onHtmlChange, onAuditReport]);
+
+  useEffect(() => {
+    if (!auditRequest) return;
+    const timer = setTimeout(() => {
+      frameRef.current?.contentWindow?.postMessage({ __ip: "a11y_run" }, "*");
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [auditRequest]);
 
   return (
     <iframe
+      ref={frameRef}
       title="Сгенерированная страница"
       srcDoc={srcDoc}
       sandbox="allow-scripts allow-forms allow-popups"
