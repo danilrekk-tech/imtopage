@@ -34,6 +34,18 @@ export async function optionalUserId(): Promise<string | null> {
   return data.user.id;
 }
 
+/** Текущий пользователь (id и e-mail), если запрос авторизован. */
+export async function optionalUser(): Promise<{ id: string; email: string | null } | null> {
+  const header = getRequestHeader("authorization");
+  if (!header?.startsWith("Bearer ")) return null;
+  const token = header.slice(7);
+  if (token.split(".").length !== 3) return null;
+  const { data, error } = await admin().auth.getUser(token);
+  if (error || !data.user) return null;
+  return { id: data.user.id, email: data.user.email ?? null };
+}
+
+
 export async function log(projectId: string, step: string, status: string, errorMessage?: string) {
   await admin()
     .from("generation_logs")
