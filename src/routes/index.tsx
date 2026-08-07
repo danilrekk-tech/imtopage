@@ -116,6 +116,8 @@ function Index() {
     },
     onSuccess: (data) => {
       setResult(data);
+      setA11yReport(null);
+
       setStep(STEPS.length - 1);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Прототип готов");
