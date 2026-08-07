@@ -11,6 +11,11 @@ import { Disclaimer } from "@/components/Disclaimer";
 import { getDeviceId } from "@/lib/device";
 import { editPage, getProject } from "@/lib/generate.functions";
 import { openHtmlInNewWindow } from "@/lib/preview-window";
+import { PreviewFrame } from "@/components/PreviewFrame";
+import { A11yPanel } from "@/components/A11yPanel";
+import { ShareDialog } from "@/components/ShareDialog";
+import type { A11yReport } from "@/lib/a11y-audit";
+
 
 export const Route = createFileRoute("/p/$projectId")({
   head: () => ({
