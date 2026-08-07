@@ -144,6 +144,7 @@ function ProjectView() {
           <Button variant="secondary" size="sm" onClick={download} disabled={!html}>
             <Download className="size-4" /> Скачать код
           </Button>
+          <ShareDialog projectId={projectId} deviceId={deviceId} />
         </div>
       </div>
 
@@ -158,14 +159,32 @@ function ProjectView() {
           </div>
         ) : null}
         {view !== "original" ? (
-          <iframe
-            title="Сгенерированная страница"
-            srcDoc={html ?? ""}
-            sandbox="allow-scripts allow-forms allow-popups"
+          <PreviewFrame
+            html={html ?? ""}
+            mode="off"
+            auditRequest={auditRequest}
+            onAuditReport={(report) => {
+              setA11yReport(report);
+              setAuditRunning(false);
+            }}
+            onHtmlChange={setHtml}
             className="h-[700px] w-full rounded-2xl border border-border bg-white"
           />
         ) : null}
       </div>
+
+      <div className="panel mt-6 p-5 pt-1">
+        <A11yPanel
+          report={a11yReport}
+          running={auditRunning}
+          onRun={() => {
+            if (view === "original") setView("split");
+            setAuditRunning(true);
+            setAuditRequest((n) => n + 1);
+          }}
+        />
+      </div>
+
 
       <div className="panel mt-6 p-5">
         <p className="text-sm font-medium">Редактировать текстом</p>
