@@ -1,6 +1,9 @@
 /** Инъекция режимов «Инспектор» и «Скопировать компонент» в превью-документ. */
 
+import { A11Y_SCRIPT } from "./a11y-audit";
+
 export type PreviewMode = "off" | "inspect" | "copy";
+
 
 const SCRIPT = (mode: "inspect" | "copy") => `
 <style id="__ip_tools">
