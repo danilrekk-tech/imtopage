@@ -88,6 +88,10 @@ function Index() {
   } | null>(null);
   const [view, setView] = useState<ViewMode>("split");
   const [previewMode, setPreviewMode] = useState<PreviewMode>("off");
+  const [a11yReport, setA11yReport] = useState<A11yReport | null>(null);
+  const [auditRunning, setAuditRunning] = useState(false);
+  const [auditRequest, setAuditRequest] = useState(0);
+
   const [instruction, setInstruction] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
