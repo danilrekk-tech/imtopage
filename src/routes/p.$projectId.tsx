@@ -43,6 +43,10 @@ function ProjectView() {
   const [view, setView] = useState<ViewMode>("split");
   const [instruction, setInstruction] = useState("");
   const [html, setHtml] = useState<string | null>(null);
+  const [a11yReport, setA11yReport] = useState<A11yReport | null>(null);
+  const [auditRunning, setAuditRunning] = useState(false);
+  const [auditRequest, setAuditRequest] = useState(0);
+
 
   useEffect(() => setDeviceId(getDeviceId()), []);
 
