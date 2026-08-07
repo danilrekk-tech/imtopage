@@ -4,7 +4,6 @@ import { A11Y_SCRIPT } from "./a11y-audit";
 
 export type PreviewMode = "off" | "inspect" | "copy";
 
-
 const SCRIPT = (mode: "inspect" | "copy") => `
 <style id="__ip_tools">
   .__ip_hl { outline: 2px solid #F5A524 !important; outline-offset: -2px; cursor: ${mode === "copy" ? "copy" : "text"}; }
@@ -82,4 +81,3 @@ export function withPreviewTools(html: string, mode: PreviewMode): string {
   const script = (mode === "off" ? "" : SCRIPT(mode)) + A11Y_SCRIPT;
   return html.includes("</body>") ? html.replace(/<\/body>/i, `${script}</body>`) : html + script;
 }
-

@@ -45,7 +45,6 @@ export async function optionalUser(): Promise<{ id: string; email: string | null
   return { id: data.user.id, email: data.user.email ?? null };
 }
 
-
 export async function log(projectId: string, step: string, status: string, errorMessage?: string) {
   await admin()
     .from("generation_logs")
