@@ -479,12 +479,28 @@ function Index() {
                   <PreviewFrame
                     html={result.html}
                     mode={previewMode}
+                    auditRequest={auditRequest}
+                    onAuditReport={(report) => {
+                      setA11yReport(report);
+                      setAuditRunning(false);
+                    }}
                     onHtmlChange={(html) => setResult((prev) => (prev ? { ...prev, html } : prev))}
                   />
                 </div>
               )}
 
+              <A11yPanel
+                report={a11yReport}
+                running={auditRunning}
+                onRun={() => {
+                  if (view === "compare") setView("result");
+                  setAuditRunning(true);
+                  setAuditRequest((n) => n + 1);
+                }}
+              />
+
               {result.analysis ? (
+
                 <details className="mt-4 rounded-xl border border-border p-4 text-sm">
                   <summary className="cursor-pointer text-muted-foreground">
                     Что распознано на макете
