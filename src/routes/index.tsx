@@ -411,6 +411,10 @@ function Index() {
                   <ExternalLink className="size-4" /> В новом окне
                 </Button>
 
+                <ShareDialog projectId={result.projectId} deviceId={deviceId} />
+
+
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="secondary" size="sm">
