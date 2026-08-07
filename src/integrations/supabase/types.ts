@@ -73,6 +73,35 @@ export type Database = {
           },
         ]
       }
+      project_shares: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          project_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          project_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_shares_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           component_map: Json | null
@@ -80,6 +109,8 @@ export type Database = {
           device_id: string | null
           generated_html: string | null
           id: string
+          share_token: string | null
+          share_visibility: string
           source_image_url: string | null
           status: string
           title: string
@@ -91,6 +122,8 @@ export type Database = {
           device_id?: string | null
           generated_html?: string | null
           id?: string
+          share_token?: string | null
+          share_visibility?: string
           source_image_url?: string | null
           status?: string
           title?: string
@@ -102,6 +135,8 @@ export type Database = {
           device_id?: string | null
           generated_html?: string | null
           id?: string
+          share_token?: string | null
+          share_visibility?: string
           source_image_url?: string | null
           status?: string
           title?: string

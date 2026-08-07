@@ -1,5 +1,7 @@
 /** Инъекция режимов «Инспектор» и «Скопировать компонент» в превью-документ. */
 
+import { A11Y_SCRIPT } from "./a11y-audit";
+
 export type PreviewMode = "off" | "inspect" | "copy";
 
 const SCRIPT = (mode: "inspect" | "copy") => `
@@ -76,7 +78,6 @@ const SCRIPT = (mode: "inspect" | "copy") => `
 `;
 
 export function withPreviewTools(html: string, mode: PreviewMode): string {
-  if (mode === "off") return html;
-  const script = SCRIPT(mode);
+  const script = (mode === "off" ? "" : SCRIPT(mode)) + A11Y_SCRIPT;
   return html.includes("</body>") ? html.replace(/<\/body>/i, `${script}</body>`) : html + script;
 }

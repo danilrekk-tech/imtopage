@@ -31,10 +31,13 @@ import { Disclaimer } from "@/components/Disclaimer";
 import { CompareSlider } from "@/components/CompareSlider";
 import { GenerationOptionsPanel } from "@/components/GenerationOptionsPanel";
 import { PreviewFrame } from "@/components/PreviewFrame";
+import { A11yPanel } from "@/components/A11yPanel";
+import { ShareDialog } from "@/components/ShareDialog";
 import { getDeviceId } from "@/lib/device";
 import { editPage, generatePage } from "@/lib/generate.functions";
 import { DEFAULT_OPTIONS, type GenerationOptions } from "@/lib/generation-options";
 import { downloadHtml, downloadZip, openInCodeSandbox } from "@/lib/export-tools";
+import type { A11yReport } from "@/lib/a11y-audit";
 import type { PreviewMode } from "@/lib/preview-inject";
 import { openHtmlInNewWindow } from "@/lib/preview-window";
 
@@ -84,6 +87,10 @@ function Index() {
   } | null>(null);
   const [view, setView] = useState<ViewMode>("split");
   const [previewMode, setPreviewMode] = useState<PreviewMode>("off");
+  const [a11yReport, setA11yReport] = useState<A11yReport | null>(null);
+  const [auditRunning, setAuditRunning] = useState(false);
+  const [auditRequest, setAuditRequest] = useState(0);
+
   const [instruction, setInstruction] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -108,6 +115,8 @@ function Index() {
     },
     onSuccess: (data) => {
       setResult(data);
+      setA11yReport(null);
+
       setStep(STEPS.length - 1);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Прототип готов");
@@ -403,6 +412,8 @@ function Index() {
                   <ExternalLink className="size-4" /> В новом окне
                 </Button>
 
+                <ShareDialog projectId={result.projectId} deviceId={deviceId} />
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="secondary" size="sm">
@@ -475,10 +486,25 @@ function Index() {
                   <PreviewFrame
                     html={result.html}
                     mode={previewMode}
+                    auditRequest={auditRequest}
+                    onAuditReport={(report) => {
+                      setA11yReport(report);
+                      setAuditRunning(false);
+                    }}
                     onHtmlChange={(html) => setResult((prev) => (prev ? { ...prev, html } : prev))}
                   />
                 </div>
               )}
+
+              <A11yPanel
+                report={a11yReport}
+                running={auditRunning}
+                onRun={() => {
+                  if (view === "compare") setView("result");
+                  setAuditRunning(true);
+                  setAuditRequest((n) => n + 1);
+                }}
+              />
 
               {result.analysis ? (
                 <details className="mt-4 rounded-xl border border-border p-4 text-sm">

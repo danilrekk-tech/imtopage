@@ -11,6 +11,10 @@ import { Disclaimer } from "@/components/Disclaimer";
 import { getDeviceId } from "@/lib/device";
 import { editPage, getProject } from "@/lib/generate.functions";
 import { openHtmlInNewWindow } from "@/lib/preview-window";
+import { PreviewFrame } from "@/components/PreviewFrame";
+import { A11yPanel } from "@/components/A11yPanel";
+import { ShareDialog } from "@/components/ShareDialog";
+import type { A11yReport } from "@/lib/a11y-audit";
 
 export const Route = createFileRoute("/p/$projectId")({
   head: () => ({
@@ -38,6 +42,9 @@ function ProjectView() {
   const [view, setView] = useState<ViewMode>("split");
   const [instruction, setInstruction] = useState("");
   const [html, setHtml] = useState<string | null>(null);
+  const [a11yReport, setA11yReport] = useState<A11yReport | null>(null);
+  const [auditRunning, setAuditRunning] = useState(false);
+  const [auditRequest, setAuditRequest] = useState(0);
 
   useEffect(() => setDeviceId(getDeviceId()), []);
 
@@ -144,6 +151,7 @@ function ProjectView() {
           <Button variant="secondary" size="sm" onClick={download} disabled={!html}>
             <Download className="size-4" /> Скачать код
           </Button>
+          <ShareDialog projectId={projectId} deviceId={deviceId} />
         </div>
       </div>
 
@@ -158,13 +166,30 @@ function ProjectView() {
           </div>
         ) : null}
         {view !== "original" ? (
-          <iframe
-            title="Сгенерированная страница"
-            srcDoc={html ?? ""}
-            sandbox="allow-scripts allow-forms allow-popups"
+          <PreviewFrame
+            html={html ?? ""}
+            mode="off"
+            auditRequest={auditRequest}
+            onAuditReport={(report) => {
+              setA11yReport(report);
+              setAuditRunning(false);
+            }}
+            onHtmlChange={setHtml}
             className="h-[700px] w-full rounded-2xl border border-border bg-white"
           />
         ) : null}
+      </div>
+
+      <div className="panel mt-6 p-5 pt-1">
+        <A11yPanel
+          report={a11yReport}
+          running={auditRunning}
+          onRun={() => {
+            if (view === "original") setView("split");
+            setAuditRunning(true);
+            setAuditRequest((n) => n + 1);
+          }}
+        />
       </div>
 
       <div className="panel mt-6 p-5">
