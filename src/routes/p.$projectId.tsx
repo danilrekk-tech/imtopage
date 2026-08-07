@@ -16,7 +16,6 @@ import { A11yPanel } from "@/components/A11yPanel";
 import { ShareDialog } from "@/components/ShareDialog";
 import type { A11yReport } from "@/lib/a11y-audit";
 
-
 export const Route = createFileRoute("/p/$projectId")({
   head: () => ({
     meta: [
@@ -46,7 +45,6 @@ function ProjectView() {
   const [a11yReport, setA11yReport] = useState<A11yReport | null>(null);
   const [auditRunning, setAuditRunning] = useState(false);
   const [auditRequest, setAuditRequest] = useState(0);
-
 
   useEffect(() => setDeviceId(getDeviceId()), []);
 
@@ -193,7 +191,6 @@ function ProjectView() {
           }}
         />
       </div>
-
 
       <div className="panel mt-6 p-5">
         <p className="text-sm font-medium">Редактировать текстом</p>

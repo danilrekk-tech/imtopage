@@ -14,11 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  getShareSettings,
-  updateShareSettings,
-  type ShareVisibility,
-} from "@/lib/share.functions";
+import { getShareSettings, updateShareSettings, type ShareVisibility } from "@/lib/share.functions";
 
 const MODES: [ShareVisibility, string, string][] = [
   ["private", "Только я", "Ссылка не работает, страницу видит только владелец."],
@@ -83,9 +79,7 @@ export function ShareDialog({ projectId, deviceId }: { projectId: string; device
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Публичная ссылка на превью</DialogTitle>
-          <DialogDescription>
-            Выберите, кто сможет открыть готовую страницу.
-          </DialogDescription>
+          <DialogDescription>Выберите, кто сможет открыть готовую страницу.</DialogDescription>
         </DialogHeader>
 
         {query.isLoading ? (

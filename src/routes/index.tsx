@@ -41,7 +41,6 @@ import type { A11yReport } from "@/lib/a11y-audit";
 import type { PreviewMode } from "@/lib/preview-inject";
 import { openHtmlInNewWindow } from "@/lib/preview-window";
 
-
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -415,8 +414,6 @@ function Index() {
 
                 <ShareDialog projectId={result.projectId} deviceId={deviceId} />
 
-
-
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="secondary" size="sm">
@@ -510,7 +507,6 @@ function Index() {
               />
 
               {result.analysis ? (
-
                 <details className="mt-4 rounded-xl border border-border p-4 text-sm">
                   <summary className="cursor-pointer text-muted-foreground">
                     Что распознано на макете

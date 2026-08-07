@@ -28,9 +28,7 @@ export function PreviewFrame({
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const payload = event.data as
-        | { __ip?: string; html?: string; report?: A11yReport }
-        | null
-        | undefined;
+        { __ip?: string; html?: string; report?: A11yReport } | null | undefined;
       if (!payload?.__ip) return;
       if (payload.__ip === "a11y" && payload.report) {
         onAuditReport?.(payload.report);
