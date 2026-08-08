@@ -127,12 +127,13 @@ export function providerMode(): ProviderMode {
   return raw === "gemini_only" || raw === "lovable_only" ? raw : "auto";
 }
 
-const GEMINI_MODEL = "gemini-2.5-flash";
-// Бесплатные vision-модели OpenRouter (проверяются по порядку).
+// Модели Gemini (проверяются по порядку) — прямой Google AI API.
+const GEMINI_MODELS = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-flash-latest"];
+// Бесплатные vision-модели OpenRouter (актуальный список, проверяются по порядку).
 const OPENROUTER_MODELS = [
-  "google/gemini-2.0-flash-exp:free",
-  "qwen/qwen2.5-vl-72b-instruct:free",
-  "meta-llama/llama-3.2-11b-vision-instruct:free",
+  "google/gemma-4-31b-it:free",
+  "google/gemma-4-26b-a4b-it:free",
+  "nvidia/nemotron-nano-12b-v2-vl:free",
 ];
 
 class ProviderError extends Error {
@@ -149,7 +150,7 @@ function parseResult(raw: string): { html: string; analysis: string } | null {
   return html ? { html, analysis } : null;
 }
 
-/** 1) Прямой вызов Google Gemini API (vision). */
+/** 1) Прямой вызов Google Gemini API (vision) с перебором моделей. */
 async function callGemini(content: Content[]): Promise<{ html: string; analysis: string }> {
   const key = process.env["GEMINI_API_KEY"];
   if (!key) throw new ProviderError("GEMINI_API_KEY не задан.", true);
@@ -161,39 +162,60 @@ async function callGemini(content: Content[]): Promise<{ html: string; analysis:
     return { inlineData: { mimeType: match[1]!, data: match[2]! } };
   });
 
-  let res: Response;
-  try {
-    res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ role: "user", parts }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 64000 },
-        }),
-      },
-    );
-  } catch {
-    throw new ProviderError("Gemini недоступен (сеть/таймаут).", true);
+  let lastError = "Gemini недоступен.";
+  let fatal = false;
+
+  for (const model of GEMINI_MODELS) {
+    let res: Response;
+    try {
+      res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            contents: [{ role: "user", parts }],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 64000,
+              // Без «мышления»: иначе бюджет токенов уходит в размышления и ответ обрывается.
+              thinkingConfig: { thinkingBudget: 0 },
+            },
+          }),
+        },
+      );
+    } catch {
+      lastError = "Gemini недоступен (сеть/таймаут).";
+      continue;
+    }
+
+    if (!res.ok) {
+      const text = (await res.text()).slice(0, 300);
+      lastError = `Gemini (${model}) ошибка ${res.status}: ${text}`;
+      // Неверный ключ — перебирать модели бессмысленно.
+      if (res.status === 401 || (res.status === 400 && /API key/i.test(text))) {
+        fatal = true;
+        break;
+      }
+      continue;
+    }
+
+    const json = (await res.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+    };
+    const raw = (json.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
+    const parsed = parseResult(raw);
+    if (parsed) return parsed;
+    lastError =
+      json.candidates?.[0]?.finishReason === "MAX_TOKENS"
+        ? `Gemini (${model}): ответ не поместился в лимит токенов.`
+        : `Gemini (${model}) вернул ответ без HTML.`;
   }
 
-  if (!res.ok) {
-    const text = (await res.text()).slice(0, 300);
-    const retryable =
-      res.status === 429 || res.status === 402 || res.status === 403 || res.status >= 500;
-    throw new ProviderError(`Gemini ошибка ${res.status}: ${text}`, retryable);
-  }
-
-  const json = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
-  };
-  const raw = (json.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
-  const parsed = parseResult(raw);
-  if (!parsed) throw new ProviderError("Gemini вернул ответ без HTML.", true);
-  return parsed;
+  throw new ProviderError(lastError, !fatal);
 }
+
 
 /** 2) OpenRouter (бесплатные vision-модели). */
 async function callOpenRouter(content: Content[]): Promise<{ html: string; analysis: string }> {
@@ -206,10 +228,16 @@ async function callOpenRouter(content: Content[]): Promise<{ html: string; analy
     try {
       res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+          "HTTP-Referer": "https://imtopage.lovable.app",
+          "X-Title": "Image to Interactive Page",
+        },
         body: JSON.stringify({
           model,
-          max_tokens: 64000,
+          // Лимит вывода бесплатных моделей ниже 64k — иначе запрос отклоняется.
+          max_tokens: 32000,
           temperature: 0.2,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
@@ -217,6 +245,7 @@ async function callOpenRouter(content: Content[]): Promise<{ html: string; analy
           ],
         }),
       });
+
     } catch {
       lastError = "OpenRouter недоступен (сеть/таймаут).";
       continue;
@@ -308,12 +337,19 @@ export async function callModel(content: Content[]): Promise<{
   const mode = providerMode();
 
   if (mode === "lovable_only") {
-    const result = await callLovable(content);
-    console.info("[ai-provider] lovable_fallback (lovable_only)");
-    return { ...result, provider: "lovable_fallback" };
+    try {
+      const result = await callLovable(content);
+      console.info("[ai-provider] lovable_fallback (lovable_only)");
+      return { ...result, provider: "lovable_fallback" };
+    } catch (error) {
+      // Кредиты Lovable закончились — не роняем сервис, идём по внешним провайдерам.
+      const message = error instanceof Error ? error.message : "Lovable AI недоступен.";
+      console.warn("[ai-provider] lovable_only failed, переключаюсь на внешние:", message);
+    }
   }
 
   const errors: string[] = [];
+
 
   try {
     const result = await callGemini(content);
@@ -346,8 +382,11 @@ export async function callModel(content: Content[]): Promise<{
     const message = error instanceof Error ? error.message : "Lovable AI недоступен.";
     console.warn("[ai-provider] lovable failed:", message);
     errors.push(message);
-    throw new Error(errors.join(" | "));
+    throw new Error(
+      `Все AI-провайдеры недоступны (Gemini → OpenRouter → Lovable AI). Детали: ${errors.join(" | ")}`,
+    );
   }
+
 }
 
 /* ============================ Кеш по SHA-256 =============================*/
