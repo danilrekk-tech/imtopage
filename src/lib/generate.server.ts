@@ -255,35 +255,42 @@ async function callGemini(content: Content[]): Promise<{ html: string; analysis:
 
 /** 2) OpenRouter (бесплатные vision-модели). */
 async function callOpenRouter(content: Content[]): Promise<{ html: string; analysis: string }> {
+  const { OPENROUTER_MODELS, markHealth } = await import("./health.server");
   const key = process.env["OPENROUTER_API_KEY"];
-  if (!key) throw new ProviderError("OPENROUTER_API_KEY не задан.", true);
+  if (!key) {
+    await markHealth("openrouter", "down", null, "OPENROUTER_API_KEY не задан");
+    throw new ProviderError("OPENROUTER_API_KEY не задан.", true);
+  }
 
   let lastError = "OpenRouter недоступен.";
   for (const model of OPENROUTER_MODELS) {
     let res: Response;
     try {
-      res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-          "HTTP-Referer": "https://imtopage.lovable.app",
-          "X-Title": "Image to Interactive Page",
+      res = await fetchWithBackoff(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${key}`,
+            "HTTP-Referer": "https://imtopage.lovable.app",
+            "X-Title": "Image to Interactive Page",
+          },
+          body: JSON.stringify({
+            model,
+            // Лимит вывода бесплатных моделей ниже 64k — иначе запрос отклоняется.
+            max_tokens: 32000,
+            temperature: 0.2,
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content },
+            ],
+          }),
         },
-        body: JSON.stringify({
-          model,
-          // Лимит вывода бесплатных моделей ниже 64k — иначе запрос отклоняется.
-          max_tokens: 32000,
-          temperature: 0.2,
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content },
-          ],
-        }),
-      });
-
-    } catch {
-      lastError = "OpenRouter недоступен (сеть/таймаут).";
+        `OpenRouter (${model})`,
+      );
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "OpenRouter недоступен (сеть/таймаут).";
       continue;
     }
     if (!res.ok) {
@@ -292,11 +299,16 @@ async function callOpenRouter(content: Content[]): Promise<{ html: string; analy
     }
     const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const parsed = parseResult(json.choices?.[0]?.message?.content ?? "");
-    if (parsed) return parsed;
+    if (parsed) {
+      await markHealth("openrouter", "up", model, null);
+      return parsed;
+    }
     lastError = `OpenRouter (${model}) вернул ответ без HTML.`;
   }
+  await markHealth("openrouter", "down", null, lastError.slice(0, 300));
   throw new ProviderError(lastError, true);
 }
+
 
 async function requestModel(content: Content[], key: string, temperature: number) {
   return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
