@@ -127,15 +127,6 @@ export function providerMode(): ProviderMode {
   return raw === "gemini_only" || raw === "lovable_only" ? raw : "auto";
 }
 
-// Модели Gemini (проверяются по порядку) — прямой Google AI API.
-const GEMINI_MODELS = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-flash-latest"];
-// Бесплатные vision-модели OpenRouter (актуальный список, проверяются по порядку).
-const OPENROUTER_MODELS = [
-  "google/gemma-4-31b-it:free",
-  "google/gemma-4-26b-a4b-it:free",
-  "nvidia/nemotron-nano-12b-v2-vl:free",
-];
-
 class ProviderError extends Error {
   retryable: boolean;
   constructor(message: string, retryable: boolean) {
@@ -150,10 +141,54 @@ function parseResult(raw: string): { html: string; analysis: string } | null {
   return html ? { html, analysis } : null;
 }
 
+const MAX_ATTEMPTS = 3;
+const BASE_DELAY_MS = 1000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Запрос с экспоненциальным backoff: повтор на таймаут/сеть, 429 и 5xx.
+ * Возвращает последний ответ или бросает ошибку сети.
+ */
+async function fetchWithBackoff(
+  url: string,
+  init: RequestInit,
+  label: string,
+  timeoutMs = 180_000,
+): Promise<Response> {
+  let lastError: Error = new Error(`${label}: сеть недоступна.`);
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) await sleep(BASE_DELAY_MS * 2 ** (attempt - 1) + Math.random() * 250);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      if (res.status === 429 || res.status >= 500) {
+        lastError = new Error(`${label}: HTTP ${res.status}`);
+        if (attempt < MAX_ATTEMPTS - 1) {
+          console.warn(`[ai-retry] ${label} HTTP ${res.status}, попытка ${attempt + 1}`);
+          continue;
+        }
+      }
+      return res;
+    } catch {
+      lastError = new Error(`${label}: таймаут или сетевая ошибка.`);
+      console.warn(`[ai-retry] ${label} таймаут/сеть, попытка ${attempt + 1}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new ProviderError(lastError.message, true);
+}
+
 /** 1) Прямой вызов Google Gemini API (vision) с перебором моделей. */
 async function callGemini(content: Content[]): Promise<{ html: string; analysis: string }> {
+  const { GEMINI_MODELS, geminiGenerationConfig, markHealth } = await import("./health.server");
   const key = process.env["GEMINI_API_KEY"];
-  if (!key) throw new ProviderError("GEMINI_API_KEY не задан.", true);
+  if (!key) {
+    await markHealth("gemini", "down", null, "GEMINI_API_KEY не задан");
+    throw new ProviderError("GEMINI_API_KEY не задан.", true);
+  }
 
   const parts = content.map((item) => {
     if (item.type === "text") return { text: item.text };
@@ -168,7 +203,7 @@ async function callGemini(content: Content[]): Promise<{ html: string; analysis:
   for (const model of GEMINI_MODELS) {
     let res: Response;
     try {
-      res = await fetch(
+      res = await fetchWithBackoff(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
         {
           method: "POST",
@@ -176,17 +211,13 @@ async function callGemini(content: Content[]): Promise<{ html: string; analysis:
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
             contents: [{ role: "user", parts }],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 64000,
-              // Без «мышления»: иначе бюджет токенов уходит в размышления и ответ обрывается.
-              thinkingConfig: { thinkingBudget: 0 },
-            },
+            generationConfig: geminiGenerationConfig(model, 64000),
           }),
         },
+        `Gemini (${model})`,
       );
-    } catch {
-      lastError = "Gemini недоступен (сеть/таймаут).";
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "Gemini недоступен (сеть/таймаут).";
       continue;
     }
 
@@ -206,48 +237,60 @@ async function callGemini(content: Content[]): Promise<{ html: string; analysis:
     };
     const raw = (json.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
     const parsed = parseResult(raw);
-    if (parsed) return parsed;
+    if (parsed) {
+      await markHealth("gemini", "up", model, null);
+      return parsed;
+    }
     lastError =
       json.candidates?.[0]?.finishReason === "MAX_TOKENS"
         ? `Gemini (${model}): ответ не поместился в лимит токенов.`
         : `Gemini (${model}) вернул ответ без HTML.`;
   }
 
+  await markHealth("gemini", "down", null, lastError.slice(0, 300));
   throw new ProviderError(lastError, !fatal);
 }
 
 
+
 /** 2) OpenRouter (бесплатные vision-модели). */
 async function callOpenRouter(content: Content[]): Promise<{ html: string; analysis: string }> {
+  const { OPENROUTER_MODELS, markHealth } = await import("./health.server");
   const key = process.env["OPENROUTER_API_KEY"];
-  if (!key) throw new ProviderError("OPENROUTER_API_KEY не задан.", true);
+  if (!key) {
+    await markHealth("openrouter", "down", null, "OPENROUTER_API_KEY не задан");
+    throw new ProviderError("OPENROUTER_API_KEY не задан.", true);
+  }
 
   let lastError = "OpenRouter недоступен.";
   for (const model of OPENROUTER_MODELS) {
     let res: Response;
     try {
-      res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-          "HTTP-Referer": "https://imtopage.lovable.app",
-          "X-Title": "Image to Interactive Page",
+      res = await fetchWithBackoff(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${key}`,
+            "HTTP-Referer": "https://imtopage.lovable.app",
+            "X-Title": "Image to Interactive Page",
+          },
+          body: JSON.stringify({
+            model,
+            // Лимит вывода бесплатных моделей ниже 64k — иначе запрос отклоняется.
+            max_tokens: 32000,
+            temperature: 0.2,
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content },
+            ],
+          }),
         },
-        body: JSON.stringify({
-          model,
-          // Лимит вывода бесплатных моделей ниже 64k — иначе запрос отклоняется.
-          max_tokens: 32000,
-          temperature: 0.2,
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content },
-          ],
-        }),
-      });
-
-    } catch {
-      lastError = "OpenRouter недоступен (сеть/таймаут).";
+        `OpenRouter (${model})`,
+      );
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "OpenRouter недоступен (сеть/таймаут).";
       continue;
     }
     if (!res.ok) {
@@ -256,11 +299,16 @@ async function callOpenRouter(content: Content[]): Promise<{ html: string; analy
     }
     const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const parsed = parseResult(json.choices?.[0]?.message?.content ?? "");
-    if (parsed) return parsed;
+    if (parsed) {
+      await markHealth("openrouter", "up", model, null);
+      return parsed;
+    }
     lastError = `OpenRouter (${model}) вернул ответ без HTML.`;
   }
+  await markHealth("openrouter", "down", null, lastError.slice(0, 300));
   throw new ProviderError(lastError, true);
 }
+
 
 async function requestModel(content: Content[], key: string, temperature: number) {
   return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -283,13 +331,17 @@ export async function callLovable(content: Content[]): Promise<{
   html: string;
   analysis: string;
 }> {
+  const { markHealth } = await import("./health.server");
   const key = process.env["LOVABLE_API_KEY"];
-  if (!key) throw new ProviderError("AI недоступен: отсутствует ключ шлюза Lovable.", false);
+  if (!key) {
+    await markHealth("lovable", "down", null, "LOVABLE_API_KEY не задан");
+    throw new ProviderError("AI недоступен: отсутствует ключ шлюза Lovable.", false);
+  }
 
   let lastError = "Не удалось получить ответ AI.";
   // До трёх попыток: сетевые сбои, 5xx, 429 и пустые/невалидные ответы.
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1200 * attempt));
+    if (attempt > 0) await sleep(BASE_DELAY_MS * 2 ** (attempt - 1));
 
     let res: Response;
     try {
@@ -301,7 +353,10 @@ export async function callLovable(content: Content[]): Promise<{
 
     if (!res.ok) {
       const text = await res.text();
-      if (res.status === 402) throw new Error("Закончились AI-кредиты рабочего пространства.");
+      if (res.status === 402) {
+        await markHealth("lovable", "down", null, "закончились кредиты (402)");
+        throw new Error("Закончились AI-кредиты рабочего пространства.");
+      }
       if (res.status === 429 || res.status >= 500) {
         lastError =
           res.status === 429
@@ -309,6 +364,7 @@ export async function callLovable(content: Content[]): Promise<{
             : `Ошибка AI (${res.status}).`;
         continue;
       }
+      await markHealth("lovable", "down", null, `HTTP ${res.status}`);
       throw new Error(`Ошибка AI (${res.status}): ${text.slice(0, 300)}`);
     }
 
@@ -317,7 +373,10 @@ export async function callLovable(content: Content[]): Promise<{
     };
     const raw = json.choices?.[0]?.message?.content ?? "";
     const parsed = parseResult(raw);
-    if (parsed) return parsed;
+    if (parsed) {
+      await markHealth("lovable", "up", "google/gemini-3.6-flash", null);
+      return parsed;
+    }
 
     lastError =
       json.choices?.[0]?.finish_reason === "length"
@@ -325,69 +384,54 @@ export async function callLovable(content: Content[]): Promise<{
         : "Не удалось извлечь код из ответа AI.";
   }
 
+  await markHealth("lovable", "down", null, lastError.slice(0, 300));
   throw new Error(lastError);
 }
 
-/** Единая точка вызова AI: цепочка провайдеров согласно AI_PROVIDER_MODE. */
+/** Единая точка вызова AI: цепочка провайдеров согласно AI_PROVIDER_MODE и health-статусу. */
 export async function callModel(content: Content[]): Promise<{
   html: string;
   analysis: string;
   provider: ProviderName;
 }> {
+  const { healthyFirst } = await import("./health.server");
   const mode = providerMode();
 
-  if (mode === "lovable_only") {
-    try {
-      const result = await callLovable(content);
-      console.info("[ai-provider] lovable_fallback (lovable_only)");
-      return { ...result, provider: "lovable_fallback" };
-    } catch (error) {
-      // Кредиты Lovable закончились — не роняем сервис, идём по внешним провайдерам.
-      const message = error instanceof Error ? error.message : "Lovable AI недоступен.";
-      console.warn("[ai-provider] lovable_only failed, переключаюсь на внешние:", message);
-    }
-  }
+  const runners: Record<
+    "gemini" | "openrouter" | "lovable",
+    { name: ProviderName; run: () => Promise<{ html: string; analysis: string }> }
+  > = {
+    gemini: { name: "gemini", run: () => callGemini(content) },
+    openrouter: { name: "openrouter_fallback", run: () => callOpenRouter(content) },
+    lovable: { name: "lovable_fallback", run: () => callLovable(content) },
+  };
+
+  let order: ("gemini" | "openrouter" | "lovable")[];
+  if (mode === "gemini_only") order = ["gemini"];
+  else if (mode === "lovable_only") order = ["lovable", "gemini", "openrouter"];
+  else order = await healthyFirst(["gemini", "openrouter", "lovable"]);
+
+  console.info(`[ai-provider] порядок (${mode}):`, order.join(" → "));
 
   const errors: string[] = [];
-
-
-  try {
-    const result = await callGemini(content);
-    console.info("[ai-provider] gemini");
-    return { ...result, provider: "gemini" };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Gemini недоступен.";
-    console.warn("[ai-provider] gemini failed:", message);
-    errors.push(message);
-    if (mode === "gemini_only" || (error instanceof ProviderError && !error.retryable)) {
-      throw new Error(errors.join(" | "));
+  for (const key of order) {
+    const { name, run } = runners[key];
+    try {
+      const result = await run();
+      console.info(`[ai-provider] ${name}`);
+      return { ...result, provider: name };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `${key} недоступен.`;
+      console.warn(`[ai-provider] ${key} failed:`, message);
+      errors.push(`${key}: ${message}`);
     }
   }
 
-  try {
-    const result = await callOpenRouter(content);
-    console.info("[ai-provider] openrouter_fallback");
-    return { ...result, provider: "openrouter_fallback" };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "OpenRouter недоступен.";
-    console.warn("[ai-provider] openrouter failed:", message);
-    errors.push(message);
-  }
-
-  try {
-    const result = await callLovable(content);
-    console.info("[ai-provider] lovable_fallback");
-    return { ...result, provider: "lovable_fallback" };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Lovable AI недоступен.";
-    console.warn("[ai-provider] lovable failed:", message);
-    errors.push(message);
-    throw new Error(
-      `Все AI-провайдеры недоступны (Gemini → OpenRouter → Lovable AI). Детали: ${errors.join(" | ")}`,
-    );
-  }
-
+  throw new Error(
+    `Все AI-провайдеры недоступны (${order.join(" → ")}). Детали: ${errors.join(" | ")}`,
+  );
 }
+
 
 /* ============================ Кеш по SHA-256 =============================*/
 
