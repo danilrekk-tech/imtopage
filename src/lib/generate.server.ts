@@ -127,15 +127,6 @@ export function providerMode(): ProviderMode {
   return raw === "gemini_only" || raw === "lovable_only" ? raw : "auto";
 }
 
-// Модели Gemini (проверяются по порядку) — прямой Google AI API.
-const GEMINI_MODELS = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-flash-latest"];
-// Бесплатные vision-модели OpenRouter (актуальный список, проверяются по порядку).
-const OPENROUTER_MODELS = [
-  "google/gemma-4-31b-it:free",
-  "google/gemma-4-26b-a4b-it:free",
-  "nvidia/nemotron-nano-12b-v2-vl:free",
-];
-
 class ProviderError extends Error {
   retryable: boolean;
   constructor(message: string, retryable: boolean) {
@@ -150,10 +141,54 @@ function parseResult(raw: string): { html: string; analysis: string } | null {
   return html ? { html, analysis } : null;
 }
 
+const MAX_ATTEMPTS = 3;
+const BASE_DELAY_MS = 1000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Запрос с экспоненциальным backoff: повтор на таймаут/сеть, 429 и 5xx.
+ * Возвращает последний ответ или бросает ошибку сети.
+ */
+async function fetchWithBackoff(
+  url: string,
+  init: RequestInit,
+  label: string,
+  timeoutMs = 180_000,
+): Promise<Response> {
+  let lastError: Error = new Error(`${label}: сеть недоступна.`);
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) await sleep(BASE_DELAY_MS * 2 ** (attempt - 1) + Math.random() * 250);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      if (res.status === 429 || res.status >= 500) {
+        lastError = new Error(`${label}: HTTP ${res.status}`);
+        if (attempt < MAX_ATTEMPTS - 1) {
+          console.warn(`[ai-retry] ${label} HTTP ${res.status}, попытка ${attempt + 1}`);
+          continue;
+        }
+      }
+      return res;
+    } catch {
+      lastError = new Error(`${label}: таймаут или сетевая ошибка.`);
+      console.warn(`[ai-retry] ${label} таймаут/сеть, попытка ${attempt + 1}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new ProviderError(lastError.message, true);
+}
+
 /** 1) Прямой вызов Google Gemini API (vision) с перебором моделей. */
 async function callGemini(content: Content[]): Promise<{ html: string; analysis: string }> {
+  const { GEMINI_MODELS, geminiGenerationConfig, markHealth } = await import("./health.server");
   const key = process.env["GEMINI_API_KEY"];
-  if (!key) throw new ProviderError("GEMINI_API_KEY не задан.", true);
+  if (!key) {
+    await markHealth("gemini", "down", null, "GEMINI_API_KEY не задан");
+    throw new ProviderError("GEMINI_API_KEY не задан.", true);
+  }
 
   const parts = content.map((item) => {
     if (item.type === "text") return { text: item.text };
@@ -168,7 +203,7 @@ async function callGemini(content: Content[]): Promise<{ html: string; analysis:
   for (const model of GEMINI_MODELS) {
     let res: Response;
     try {
-      res = await fetch(
+      res = await fetchWithBackoff(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
         {
           method: "POST",
@@ -176,17 +211,13 @@ async function callGemini(content: Content[]): Promise<{ html: string; analysis:
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
             contents: [{ role: "user", parts }],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 64000,
-              // Без «мышления»: иначе бюджет токенов уходит в размышления и ответ обрывается.
-              thinkingConfig: { thinkingBudget: 0 },
-            },
+            generationConfig: geminiGenerationConfig(model, 64000),
           }),
         },
+        `Gemini (${model})`,
       );
-    } catch {
-      lastError = "Gemini недоступен (сеть/таймаут).";
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "Gemini недоступен (сеть/таймаут).";
       continue;
     }
 
@@ -206,15 +237,20 @@ async function callGemini(content: Content[]): Promise<{ html: string; analysis:
     };
     const raw = (json.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
     const parsed = parseResult(raw);
-    if (parsed) return parsed;
+    if (parsed) {
+      await markHealth("gemini", "up", model, null);
+      return parsed;
+    }
     lastError =
       json.candidates?.[0]?.finishReason === "MAX_TOKENS"
         ? `Gemini (${model}): ответ не поместился в лимит токенов.`
         : `Gemini (${model}) вернул ответ без HTML.`;
   }
 
+  await markHealth("gemini", "down", null, lastError.slice(0, 300));
   throw new ProviderError(lastError, !fatal);
 }
+
 
 
 /** 2) OpenRouter (бесплатные vision-модели). */
