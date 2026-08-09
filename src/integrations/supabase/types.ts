@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_provider_health: {
+        Row: {
+          checked_at: string
+          error: string | null
+          latency_ms: number | null
+          model: string | null
+          provider: string
+          status: string
+        }
+        Insert: {
+          checked_at?: string
+          error?: string | null
+          latency_ms?: number | null
+          model?: string | null
+          provider: string
+          status?: string
+        }
+        Update: {
+          checked_at?: string
+          error?: string | null
+          latency_ms?: number | null
+          model?: string | null
+          provider?: string
+          status?: string
+        }
+        Relationships: []
+      }
       generation_cache: {
         Row: {
           analysis: string | null
