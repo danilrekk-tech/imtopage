@@ -32,6 +32,7 @@ import { CompareSlider } from "@/components/CompareSlider";
 import { GenerationOptionsPanel } from "@/components/GenerationOptionsPanel";
 import { PreviewFrame } from "@/components/PreviewFrame";
 import { A11yPanel } from "@/components/A11yPanel";
+import { ProviderBadge } from "@/components/ProviderBadge";
 import { ShareDialog } from "@/components/ShareDialog";
 import { getDeviceId } from "@/lib/device";
 import { editPage, generatePage } from "@/lib/generate.functions";
@@ -84,6 +85,7 @@ function Index() {
     projectId: string;
     html: string;
     analysis: string;
+    provider?: string;
   } | null>(null);
   const [view, setView] = useState<ViewMode>("split");
   const [previewMode, setPreviewMode] = useState<PreviewMode>("off");
@@ -133,7 +135,9 @@ function Index() {
       return editFn({ data: { projectId: result.projectId, instruction: text, deviceId } });
     },
     onSuccess: (data, text) => {
-      setResult((prev) => (prev ? { ...prev, html: data.html, analysis: data.analysis } : prev));
+      setResult((prev) =>
+        prev ? { ...prev, html: data.html, analysis: data.analysis, provider: data.provider } : prev,
+      );
       setHistory((prev) => [...prev, text]);
       setInstruction("");
       toast.success("Правка внесена");
@@ -407,6 +411,8 @@ function Index() {
                     </button>
                   ))}
                 </div>
+
+                <ProviderBadge used={result.provider} />
 
                 <Button variant="secondary" size="sm" onClick={openInNewWindow}>
                   <ExternalLink className="size-4" /> В новом окне
