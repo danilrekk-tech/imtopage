@@ -331,13 +331,17 @@ export async function callLovable(content: Content[]): Promise<{
   html: string;
   analysis: string;
 }> {
+  const { markHealth } = await import("./health.server");
   const key = process.env["LOVABLE_API_KEY"];
-  if (!key) throw new ProviderError("AI недоступен: отсутствует ключ шлюза Lovable.", false);
+  if (!key) {
+    await markHealth("lovable", "down", null, "LOVABLE_API_KEY не задан");
+    throw new ProviderError("AI недоступен: отсутствует ключ шлюза Lovable.", false);
+  }
 
   let lastError = "Не удалось получить ответ AI.";
   // До трёх попыток: сетевые сбои, 5xx, 429 и пустые/невалидные ответы.
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1200 * attempt));
+    if (attempt > 0) await sleep(BASE_DELAY_MS * 2 ** (attempt - 1));
 
     let res: Response;
     try {
@@ -349,7 +353,10 @@ export async function callLovable(content: Content[]): Promise<{
 
     if (!res.ok) {
       const text = await res.text();
-      if (res.status === 402) throw new Error("Закончились AI-кредиты рабочего пространства.");
+      if (res.status === 402) {
+        await markHealth("lovable", "down", null, "закончились кредиты (402)");
+        throw new Error("Закончились AI-кредиты рабочего пространства.");
+      }
       if (res.status === 429 || res.status >= 500) {
         lastError =
           res.status === 429
@@ -357,6 +364,7 @@ export async function callLovable(content: Content[]): Promise<{
             : `Ошибка AI (${res.status}).`;
         continue;
       }
+      await markHealth("lovable", "down", null, `HTTP ${res.status}`);
       throw new Error(`Ошибка AI (${res.status}): ${text.slice(0, 300)}`);
     }
 
@@ -365,7 +373,10 @@ export async function callLovable(content: Content[]): Promise<{
     };
     const raw = json.choices?.[0]?.message?.content ?? "";
     const parsed = parseResult(raw);
-    if (parsed) return parsed;
+    if (parsed) {
+      await markHealth("lovable", "up", "google/gemini-3.6-flash", null);
+      return parsed;
+    }
 
     lastError =
       json.choices?.[0]?.finish_reason === "length"
@@ -373,69 +384,54 @@ export async function callLovable(content: Content[]): Promise<{
         : "Не удалось извлечь код из ответа AI.";
   }
 
+  await markHealth("lovable", "down", null, lastError.slice(0, 300));
   throw new Error(lastError);
 }
 
-/** Единая точка вызова AI: цепочка провайдеров согласно AI_PROVIDER_MODE. */
+/** Единая точка вызова AI: цепочка провайдеров согласно AI_PROVIDER_MODE и health-статусу. */
 export async function callModel(content: Content[]): Promise<{
   html: string;
   analysis: string;
   provider: ProviderName;
 }> {
+  const { healthyFirst } = await import("./health.server");
   const mode = providerMode();
 
-  if (mode === "lovable_only") {
-    try {
-      const result = await callLovable(content);
-      console.info("[ai-provider] lovable_fallback (lovable_only)");
-      return { ...result, provider: "lovable_fallback" };
-    } catch (error) {
-      // Кредиты Lovable закончились — не роняем сервис, идём по внешним провайдерам.
-      const message = error instanceof Error ? error.message : "Lovable AI недоступен.";
-      console.warn("[ai-provider] lovable_only failed, переключаюсь на внешние:", message);
-    }
-  }
+  const runners: Record<
+    "gemini" | "openrouter" | "lovable",
+    { name: ProviderName; run: () => Promise<{ html: string; analysis: string }> }
+  > = {
+    gemini: { name: "gemini", run: () => callGemini(content) },
+    openrouter: { name: "openrouter_fallback", run: () => callOpenRouter(content) },
+    lovable: { name: "lovable_fallback", run: () => callLovable(content) },
+  };
+
+  let order: ("gemini" | "openrouter" | "lovable")[];
+  if (mode === "gemini_only") order = ["gemini"];
+  else if (mode === "lovable_only") order = ["lovable", "gemini", "openrouter"];
+  else order = await healthyFirst(["gemini", "openrouter", "lovable"]);
+
+  console.info(`[ai-provider] порядок (${mode}):`, order.join(" → "));
 
   const errors: string[] = [];
-
-
-  try {
-    const result = await callGemini(content);
-    console.info("[ai-provider] gemini");
-    return { ...result, provider: "gemini" };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Gemini недоступен.";
-    console.warn("[ai-provider] gemini failed:", message);
-    errors.push(message);
-    if (mode === "gemini_only" || (error instanceof ProviderError && !error.retryable)) {
-      throw new Error(errors.join(" | "));
+  for (const key of order) {
+    const { name, run } = runners[key];
+    try {
+      const result = await run();
+      console.info(`[ai-provider] ${name}`);
+      return { ...result, provider: name };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `${key} недоступен.`;
+      console.warn(`[ai-provider] ${key} failed:`, message);
+      errors.push(`${key}: ${message}`);
     }
   }
 
-  try {
-    const result = await callOpenRouter(content);
-    console.info("[ai-provider] openrouter_fallback");
-    return { ...result, provider: "openrouter_fallback" };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "OpenRouter недоступен.";
-    console.warn("[ai-provider] openrouter failed:", message);
-    errors.push(message);
-  }
-
-  try {
-    const result = await callLovable(content);
-    console.info("[ai-provider] lovable_fallback");
-    return { ...result, provider: "lovable_fallback" };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Lovable AI недоступен.";
-    console.warn("[ai-provider] lovable failed:", message);
-    errors.push(message);
-    throw new Error(
-      `Все AI-провайдеры недоступны (Gemini → OpenRouter → Lovable AI). Детали: ${errors.join(" | ")}`,
-    );
-  }
-
+  throw new Error(
+    `Все AI-провайдеры недоступны (${order.join(" → ")}). Детали: ${errors.join(" | ")}`,
+  );
 }
+
 
 /* ============================ Кеш по SHA-256 =============================*/
 
