@@ -38,12 +38,6 @@ export function SiteHeader() {
         <button className="icon-button" aria-label="Переключить тему" onClick={() => setDark((v) => !v)}>
           {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
         </button>
-        <Link
-          to="/projects"
-          className={`top-link ${path === "/projects" ? "top-link-active" : ""}`}
-        >
-          Мои проекты
-        </Link>
         {email ? (
           <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()}>
             Выйти
