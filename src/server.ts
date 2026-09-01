@@ -55,7 +55,7 @@ async function serveSharedPrototype(request: Request): Promise<Response | null> 
     const { data: project } = await db
       .from("projects")
       .select("id, title, generated_html, share_visibility, share_token")
-      .eq("share_token", match[1])
+      .eq("share_token", match[1]!)
       .maybeSingle();
 
     if (!project || project.share_visibility === "private" || !project.generated_html) {

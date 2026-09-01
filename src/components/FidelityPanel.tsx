@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { evaluateFidelity, type FidelityReport } from "@/lib/fidelity";
 
-export function FidelityPanel({ sourceUrl, frameRef }: { sourceUrl?: string; frameRef: RefObject<HTMLIFrameElement | null> }) {
+export function FidelityPanel({ sourceUrl, frameRef }: { sourceUrl?: string | undefined; frameRef: RefObject<HTMLIFrameElement | null> }) {
   const [report, setReport] = useState<FidelityReport | null>(null);
   const [running, setRunning] = useState(false);
 

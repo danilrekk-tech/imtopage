@@ -70,7 +70,10 @@ function pixelScore(a: HTMLCanvasElement, b: HTMLCanvasElement) {
   const bb = bx.getImageData(0, 0, size, size).data;
   let diff = 0;
   for (let i = 0; i < aa.length; i += 4) {
-    diff += Math.abs(aa[i] - bb[i]) + Math.abs(aa[i + 1] - bb[i + 1]) + Math.abs(aa[i + 2] - bb[i + 2]);
+    diff +=
+      Math.abs((aa[i] ?? 0) - (bb[i] ?? 0)) +
+      Math.abs((aa[i + 1] ?? 0) - (bb[i + 1] ?? 0)) +
+      Math.abs((aa[i + 2] ?? 0) - (bb[i + 2] ?? 0));
   }
   const maxDiff = size * size * 3 * 255;
   return Math.max(0, Math.min(100, 100 - (diff / maxDiff) * 100));
