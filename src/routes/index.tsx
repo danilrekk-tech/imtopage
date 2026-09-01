@@ -47,6 +47,7 @@ import { downloadHtml, downloadZip, openInCodeSandbox } from "@/lib/export-tools
 import type { A11yReport } from "@/lib/a11y-audit";
 import type { PreviewMode } from "@/lib/preview-inject";
 import { openHtmlInNewWindow } from "@/lib/preview-window";
+import heroVisual from "@/assets/hero-visual.png.asset.json";
 
 export const Route = createFileRoute("/")({
   head: () => ({
