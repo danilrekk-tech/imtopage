@@ -182,7 +182,7 @@ function Index() {
 
       <main className="app-content">
         <div className="workspace-head">
-          <div className="flex min-w-0 items-center gap-3"><div className="workspace-back">‹</div><div><div className="flex items-center gap-2"><h1 className="text-sm font-semibold">Новый прототип</h1><span className="status-badge">Черновик</span></div><p className="hidden text-[11px] text-muted-foreground sm:block">Скриншот → интерактивная страница</p></div></div>
+          <div className="flex min-w-0 items-center gap-3"><div><div className="flex items-center gap-2"><h1 className="text-sm font-semibold">Новый прототип</h1><span className="status-badge">Черновик</span></div><p className="hidden text-[11px] text-muted-foreground sm:block">Скриншот → интерактивная страница</p></div></div>
           <div className="flex items-center gap-2"><Button variant="secondary" size="sm" disabled={!result} onClick={openInNewWindow}><ExternalLink className="size-3.5" /> Предпросмотр</Button><Button size="sm" disabled={!result} onClick={() => result && downloadZip(result.html, options.framework, title)}><Download className="size-3.5" /> Экспорт</Button></div>
         </div>
 
