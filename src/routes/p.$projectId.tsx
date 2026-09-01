@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { Download, ExternalLink, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Archive, Download, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Disclaimer } from "@/components/Disclaimer";
 import { getDeviceId } from "@/lib/device";
 import { editPage, getProject } from "@/lib/generate.functions";
+import { downloadZip } from "@/lib/export-tools";
 import { openHtmlInNewWindow } from "@/lib/preview-window";
 import { PreviewFrame } from "@/components/PreviewFrame";
 import { A11yPanel } from "@/components/A11yPanel";
 import { ShareDialog } from "@/components/ShareDialog";
+import { FidelityPanel } from "@/components/FidelityPanel";
 import type { A11yReport } from "@/lib/a11y-audit";
+import { RADII, SHADOWS, SPACING } from "@/lib/generation-options";
 
 export const Route = createFileRoute("/p/$projectId")({
   head: () => ({
@@ -45,6 +48,7 @@ function ProjectView() {
   const [a11yReport, setA11yReport] = useState<A11yReport | null>(null);
   const [auditRunning, setAuditRunning] = useState(false);
   const [auditRequest, setAuditRequest] = useState(0);
+  const previewRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => setDeviceId(getDeviceId()), []);
 
@@ -149,7 +153,17 @@ function ProjectView() {
             <ExternalLink className="size-4" /> Открыть в новом окне
           </Button>
           <Button variant="secondary" size="sm" onClick={download} disabled={!html}>
-            <Download className="size-4" /> Скачать код
+            <Download className="size-4" /> Скачать HTML
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              if (html) void downloadZip(html, "html", query.data?.title ?? "prototype");
+            }}
+            disabled={!html}
+          >
+            <Archive className="size-4" /> Скачать ZIP
           </Button>
           <ShareDialog projectId={projectId} deviceId={deviceId} />
         </div>
@@ -175,10 +189,35 @@ function ProjectView() {
               setAuditRunning(false);
             }}
             onHtmlChange={setHtml}
+            frameRef={previewRef}
             className="h-[700px] w-full rounded-2xl border border-border bg-white"
           />
         ) : null}
       </div>
+
+      <FidelityPanel sourceUrl={query.data?.image_url ?? undefined} frameRef={previewRef} />
+
+      {query.data?.options ? (
+        <div className="panel mt-6 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><p className="text-sm font-medium">Дизайн-система проекта</p><p className="mt-1 text-xs text-muted-foreground">Токены, с которыми был создан этот прототип.</p></div>
+            <Link
+              to="/"
+              onClick={() => {
+                try { localStorage.setItem("imtopage-token-draft", JSON.stringify(query.data?.options ?? {})); } catch {}
+              }}
+              className="text-xs text-primary hover:underline"
+            >Создать новый с этими принципами</Link>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {[query.data.options.primaryColor, query.data.options.secondaryColor, query.data.options.backgroundColor, query.data.options.surfaceColor, query.data.options.textColor, query.data.options.mutedColor, query.data.options.borderColor].map((color, i) => <span key={`${color}-${i}`} title={color} className="size-8 rounded-lg border border-white/10" style={{ backgroundColor: color }} />)}
+            <span className="token-chip">{query.data.options.fontFamily}</span>
+            <span className="token-chip">{RADII.find((x) => x.id === query.data?.options.radius)?.label}</span>
+            <span className="token-chip">{SPACING.find((x) => x.id === query.data?.options.spacing)?.label}</span>
+            <span className="token-chip">{SHADOWS.find((x) => x.id === query.data?.options.shadow)?.label}</span>
+          </div>
+        </div>
+      ) : null}
 
       <div className="panel mt-6 p-5 pt-1">
         <A11yPanel

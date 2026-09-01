@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Copy, Link2, Loader2, Share2 } from "lucide-react";
+import { Check, Copy, ExternalLink, Link2, Loader2, Share2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -130,23 +130,36 @@ export function ShareDialog({ projectId, deviceId }: { projectId: string; device
             </Button>
 
             {url ? (
-              <div className="flex items-center gap-2 rounded-lg border border-border p-2">
-                <Link2 className="size-4 shrink-0 text-primary" />
-                <span className="truncate font-mono text-xs">{url}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label="Скопировать ссылку"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(url).then(() => {
-                      setCopied(true);
-                      toast.success("Ссылка скопирована");
-                      setTimeout(() => setCopied(false), 1500);
-                    });
-                  }}
-                >
-                  {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-                </Button>
+              <div className="space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-3">
+                <div className="flex items-center gap-2">
+                  <Link2 className="size-4 shrink-0 text-primary" />
+                  <span className="truncate font-mono text-xs">{url}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    className="flex-1"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(url).then(() => {
+                        setCopied(true);
+                        toast.success("Ссылка скопирована");
+                        setTimeout(() => setCopied(false), 1500);
+                      });
+                    }}
+                  >
+                    {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                    {copied ? "Скопировано" : "Копировать ссылку"}
+                  </Button>
+                  <Button asChild className="flex-1">
+                    <a href={url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="size-4" />
+                      Открыть сайт
+                    </a>
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Ссылка открывает сам прототип на весь экран — без интерфейса Image → Interactive и без iframe-окна.
+                </p>
               </div>
             ) : null}
           </div>

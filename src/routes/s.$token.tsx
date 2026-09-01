@@ -53,15 +53,15 @@ function SharedPage() {
     );
   }
 
+  // Normal GET requests to /s/:token are served directly by src/server.ts as the generated HTML.
+  // This fallback is kept only for client-side navigation inside the app.
   return (
-    <main className="mx-auto max-w-6xl px-4 pb-16 pt-8">
-      <h1 className="text-xl font-semibold">{query.data?.title}</h1>
-      <p className="mt-1 text-xs text-muted-foreground">Публичное превью прототипа</p>
+    <main className="min-h-screen bg-white">
       <iframe
         title="Опубликованная страница"
         srcDoc={query.data?.html ?? ""}
         sandbox="allow-scripts allow-forms allow-popups"
-        className="mt-4 h-[80vh] w-full rounded-2xl border border-border bg-white"
+        className="h-screen w-full border-0"
       />
     </main>
   );

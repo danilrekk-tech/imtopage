@@ -3,13 +3,24 @@ import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Activity,
+  ArrowUpRight,
+  Check,
   Code2,
   Copy,
   Download,
   ExternalLink,
   FileArchive,
+  FolderKanban,
+  History,
+  LayoutTemplate,
   Loader2,
   MousePointerClick,
+  Palette,
+  PanelLeft,
+  Plus,
+  Rocket,
+  Settings2,
   Sparkles,
   SplitSquareHorizontal,
   Upload,
@@ -21,12 +32,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Disclaimer } from "@/components/Disclaimer";
 import { CompareSlider } from "@/components/CompareSlider";
 import { GenerationOptionsPanel } from "@/components/GenerationOptionsPanel";
@@ -45,33 +51,14 @@ import { openHtmlInNewWindow } from "@/lib/preview-window";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Image to Interactive Page — скриншот в рабочий прототип" },
-      {
-        name: "description",
-        content:
-          "Загрузите до трёх скриншотов — сервис соберёт интерактивный прототип на HTML, React или Vue с рабочими компонентами, темами, инспектором и экспортом в ZIP или CodeSandbox.",
-      },
-      { property: "og:title", content: "Image to Interactive Page — скриншот в рабочий прототип" },
-      {
-        property: "og:description",
-        content:
-          "Скриншот превращается в рабочий прототип: выбор стека, дизайн-токены, сравнение с оригиналом, инспектор и экспорт кода.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      { title: "Image to Interactive — AI-прототипы из скриншотов" },
+      { name: "description", content: "Превращайте скриншоты и макеты в живые интерактивные прототипы." },
     ],
   }),
   component: Index,
 });
 
-const STEPS = [
-  "Анализирую макет",
-  "Распознаю компоненты",
-  "Пишу код",
-  "Собираю интерактив",
-  "Готово",
-];
-
+const STEPS = ["Анализирую макет", "Распознаю компоненты", "Пишу код", "Собираю интерактив", "Готово"];
 type ViewMode = "result" | "split" | "compare";
 type UploadedFile = { dataUrl: string; name: string };
 
@@ -81,24 +68,25 @@ function Index() {
   const [options, setOptions] = useState<GenerationOptions>(DEFAULT_OPTIONS);
   const [dragging, setDragging] = useState(false);
   const [step, setStep] = useState(0);
-  const [result, setResult] = useState<{
-    projectId: string;
-    html: string;
-    analysis: string;
-    provider?: string;
-  } | null>(null);
-  const [view, setView] = useState<ViewMode>("split");
+  const [result, setResult] = useState<{ projectId: string; html: string; analysis: string; provider?: string } | null>(null);
+  const [view, setView] = useState<ViewMode>("result");
   const [previewMode, setPreviewMode] = useState<PreviewMode>("off");
   const [a11yReport, setA11yReport] = useState<A11yReport | null>(null);
   const [auditRunning, setAuditRunning] = useState(false);
   const [auditRequest, setAuditRequest] = useState(0);
-
   const [instruction, setInstruction] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
-
   useEffect(() => setDeviceId(getDeviceId()), []);
+  useEffect(() => {
+    try {
+      const draft = localStorage.getItem("imtopage-token-draft");
+      if (draft) setOptions((current) => ({ ...current, ...JSON.parse(draft) }));
+    } catch {
+      // Ignore invalid local token drafts.
+    }
+  }, []);
 
   const generateFn = useServerFn(generatePage);
   const editFn = useServerFn(editPage);
@@ -106,27 +94,16 @@ function Index() {
   const generate = useMutation({
     mutationFn: async () => {
       if (!files.length) throw new Error("Сначала загрузите изображение.");
-      return generateFn({
-        data: {
-          images: files.map((f) => f.dataUrl),
-          fileName: files[0]!.name,
-          deviceId,
-          options,
-        },
-      });
+      return generateFn({ data: { images: files.map((f) => f.dataUrl), fileName: files[0]!.name, deviceId, options } });
     },
     onSuccess: (data) => {
       setResult(data);
       setA11yReport(null);
-
       setStep(STEPS.length - 1);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Прототип готов");
     },
-    onError: (error: Error) => {
-      setStep(0);
-      toast.error(error.message);
-    },
+    onError: (error: Error) => { setStep(0); toast.error(error.message); },
   });
 
   const edit = useMutation({
@@ -135,9 +112,7 @@ function Index() {
       return editFn({ data: { projectId: result.projectId, instruction: text, deviceId } });
     },
     onSuccess: (data, text) => {
-      setResult((prev) =>
-        prev ? { ...prev, html: data.html, analysis: data.analysis, provider: data.provider } : prev,
-      );
+      setResult((prev) => prev ? { ...prev, html: data.html, analysis: data.analysis, provider: data.provider } : prev);
       setHistory((prev) => [...prev, text]);
       setInstruction("");
       toast.success("Правка внесена");
@@ -148,419 +123,118 @@ function Index() {
   useEffect(() => {
     if (!generate.isPending) return;
     setStep(0);
-    const timer = setInterval(() => {
-      setStep((prev) => (prev < STEPS.length - 2 ? prev + 1 : prev));
-    }, 6000);
+    const timer = setInterval(() => setStep((prev) => prev < STEPS.length - 2 ? prev + 1 : prev), 6000);
     return () => clearInterval(timer);
   }, [generate.isPending]);
 
   const addFiles = useCallback((incoming: File[]) => {
     const valid: File[] = [];
     for (const f of incoming) {
-      if (!/^image\/(png|jpe?g|webp)$/.test(f.type)) {
-        toast.error(`${f.name}: поддерживаются PNG, JPG и WEBP.`);
-        continue;
-      }
-      if (f.size > 10 * 1024 * 1024) {
-        toast.error(`${f.name}: файл больше 10 МБ.`);
-        continue;
-      }
+      if (!/^image\/(png|jpe?g|webp)$/.test(f.type)) { toast.error(`${f.name}: поддерживаются PNG, JPG и WEBP.`); continue; }
+      if (f.size > 10 * 1024 * 1024) { toast.error(`${f.name}: файл больше 10 МБ.`); continue; }
       valid.push(f);
     }
     if (!valid.length) return;
-
-    Promise.all(
-      valid.map(
-        (f) =>
-          new Promise<UploadedFile>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve({ dataUrl: String(reader.result), name: f.name });
-            reader.readAsDataURL(f);
-          }),
-      ),
-    ).then((loaded) => {
-      setFiles((prev) => {
-        const next = [...prev, ...loaded].slice(0, 3);
-        if (prev.length + loaded.length > 3) toast.info("Можно загрузить максимум 3 экрана.");
-        return next;
-      });
-      setResult(null);
-      setHistory([]);
+    Promise.all(valid.map((f) => new Promise<UploadedFile>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ dataUrl: String(reader.result), name: f.name });
+      reader.readAsDataURL(f);
+    }))).then((loaded) => {
+      setFiles((prev) => [...prev, ...loaded].slice(0, 3));
+      setResult(null); setHistory([]);
     });
   }, []);
 
   const openInNewWindow = () => {
     if (!result) return;
-    try {
-      openHtmlInNewWindow(result.html);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось открыть окно");
-    }
+    try { openHtmlInNewWindow(result.html); } catch (error) { toast.error(error instanceof Error ? error.message : "Не удалось открыть окно"); }
   };
-
   const copyAll = async () => {
     if (!result) return;
-    try {
-      await navigator.clipboard.writeText(result.html);
-      toast.success("Весь код скопирован");
-    } catch {
-      toast.error("Браузер не дал доступ к буферу обмена");
-    }
+    try { await navigator.clipboard.writeText(result.html); toast.success("Весь код скопирован"); }
+    catch { toast.error("Браузер не дал доступ к буферу обмена"); }
   };
 
   const busy = generate.isPending;
   const title = files[0]?.name.replace(/\.[^.]+$/, "") ?? "prototype";
 
   return (
-    <main className="mx-auto max-w-7xl px-4 pb-24 pt-12">
-      <section className="max-w-3xl">
-        <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted-foreground">
-          <Sparkles className="size-3.5 text-primary" />
-          Скриншот → рабочий прототип
-        </span>
-        <h1 className="mt-5 text-4xl font-bold sm:text-5xl">
-          Превратите макет в{" "}
-          <span className="text-primary">интерактивный прототип на вашем стеке</span>
-        </h1>
-        <p className="mt-4 max-w-[65ch] text-base leading-relaxed text-muted-foreground">
-          Загрузите до трёх экранов, выберите стек и дизайн-токены. Сервис соберёт связанный
-          прототип с рабочими компонентами, переключателем тем, инспектором элементов и экспортом
-          кода.
-        </p>
-      </section>
+    <div className="app-shell">
+      <aside className="app-sidebar">
+        <div className="sidebar-section">
+          <Link to="/" className="sidebar-item sidebar-active"><Sparkles className="size-4" /> Новый прототип</Link>
+          <Link to="/projects" className="sidebar-item"><FolderKanban className="size-4" /> Мои проекты</Link>
+          <button className="sidebar-item"><LayoutTemplate className="size-4" /> Шаблоны дизайна</button>
+          <button className="sidebar-item"><Palette className="size-4" /> Дизайн-токены</button>
+          <button className="sidebar-item"><History className="size-4" /> История генераций</button>
+          <button className="sidebar-item"><Download className="size-4" /> Экспорт кода</button>
+          <button className="sidebar-item"><Settings2 className="size-4" /> Настройки</button>
+        </div>
+        <div className="sidebar-divider" />
+        <div className="sidebar-help">
+          <div className="sidebar-help-icon"><Rocket className="size-4" /></div>
+          <div><p className="text-sm font-semibold">Как это работает?</p><p className="mt-1 text-xs text-muted-foreground">Загрузите макет — получите код.</p></div>
+          <button className="sidebar-help-button">Посмотреть</button>
+        </div>
+        <div className="sidebar-user"><div className="avatar">IP</div><div className="min-w-0"><p className="truncate text-xs font-semibold">Ваш проект</p><p className="truncate text-[11px] text-muted-foreground">Рабочее пространство</p></div></div>
+      </aside>
 
-      <section className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,380px)_1fr]">
-        <div className="panel space-y-5 p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            1. Загрузка · до 3 экранов
-          </h2>
-
-          {files.length ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-2">
-                {files.map((f, index) => (
-                  <div
-                    key={`${f.name}-${index}`}
-                    className="group relative overflow-hidden rounded-lg border border-border"
-                  >
-                    <img src={f.dataUrl} alt={f.name} className="h-20 w-full object-cover" />
-                    <span className="absolute left-1 top-1 rounded bg-background/80 px-1 font-mono text-[10px]">
-                      {index + 1}
-                    </span>
-                    <button
-                      onClick={() => setFiles((prev) => prev.filter((_, i) => i !== index))}
-                      className="absolute right-1 top-1 rounded bg-background/80 p-1 opacity-0 transition-opacity group-hover:opacity-100"
-                      aria-label={`Убрать ${f.name}`}
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </div>
-                ))}
-                {files.length < 3 ? (
-                  <button
-                    onClick={() => inputRef.current?.click()}
-                    className="flex h-20 items-center justify-center rounded-lg border border-dashed border-border text-xs text-muted-foreground transition-colors hover:border-primary/60"
-                  >
-                    + экран
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragging(false);
-                addFiles(Array.from(e.dataTransfer.files ?? []));
-              }}
-              onClick={() => inputRef.current?.click()}
-              className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-12 text-center transition-colors ${
-                dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/60"
-              }`}
-            >
-              <Upload className="size-6 text-primary" />
-              <p className="mt-3 text-sm font-medium">Перетащите до 3 изображений</p>
-              <p className="mt-1 text-xs text-muted-foreground">PNG, JPG, WEBP · до 10 МБ каждое</p>
-            </div>
-          )}
-
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              addFiles(Array.from(e.target.files ?? []));
-              e.target.value = "";
-            }}
-          />
-
-          <GenerationOptionsPanel value={options} onChange={setOptions} disabled={busy} />
-
-          <Button
-            className="w-full transition-transform active:translate-y-px"
-            disabled={busy || !deviceId || !files.length}
-            onClick={() => generate.mutate()}
-          >
-            {busy ? (
-              <>
-                <Loader2 className="size-4 animate-spin" /> Генерирую…
-              </>
-            ) : (
-              <>
-                <Wand2 className="size-4" /> Собрать прототип
-              </>
-            )}
-          </Button>
-
-          {(busy || result) && (
-            <div className="space-y-3">
-              <Progress value={((step + (result ? 1 : 0)) / STEPS.length) * 100} />
-              <ul className="space-y-1.5 text-xs">
-                {STEPS.map((label, index) => {
-                  const done = result ? true : index < step;
-                  const active = !result && index === step;
-                  return (
-                    <li
-                      key={label}
-                      className={
-                        done
-                          ? "text-primary"
-                          : active
-                            ? "text-foreground"
-                            : "text-muted-foreground/60"
-                      }
-                    >
-                      {done ? "✓" : active ? "…" : "•"} {label}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-
-          <Disclaimer />
+      <main className="app-content">
+        <div className="workspace-head">
+          <div className="flex min-w-0 items-center gap-3"><div className="workspace-back">‹</div><div><div className="flex items-center gap-2"><h1 className="text-sm font-semibold">Новый прототип</h1><span className="status-badge">Черновик</span></div><p className="hidden text-[11px] text-muted-foreground sm:block">Скриншот → интерактивная страница</p></div></div>
+          <div className="flex items-center gap-2"><Button variant="secondary" size="sm" disabled={!result} onClick={openInNewWindow}><ExternalLink className="size-3.5" /> Предпросмотр</Button><Button size="sm" disabled={!result} onClick={() => result && downloadZip(result.html, options.framework, title)}><Download className="size-3.5" /> Экспорт</Button></div>
         </div>
 
-        <div className="panel min-h-[560px] p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              2. Результат
-            </h2>
-            {result ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex rounded-lg border border-border p-0.5 text-xs">
-                  {(
-                    [
-                      ["result", "Результат"],
-                      ["split", "Рядом"],
-                      ["compare", "Сравнить с оригиналом"],
-                    ] as [ViewMode, string][]
-                  ).map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      onClick={() => setView(mode)}
-                      className={`rounded-md px-3 py-1.5 transition-colors ${
-                        view === mode
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {mode === "compare" ? (
-                        <span className="flex items-center gap-1.5">
-                          <SplitSquareHorizontal className="size-3.5" /> {label}
-                        </span>
-                      ) : (
-                        label
-                      )}
-                    </button>
-                  ))}
-                </div>
+        <section className="hero-grid">
+          <div className="hero-copy">
+            <div className="eyebrow"><Sparkles className="size-3.5" /> AI WORKSPACE</div>
+            <h2>Превратите макет в<br /><span>интерактивный прототип</span></h2>
+            <p>Загрузите макет, выберите технологии, настройте параметры и получите живую страницу, готовую к передаче разработчику.</p>
+            <div className="hero-stats">
+              <div><span className="stat-icon"><PanelLeft className="size-4" /></span><strong>До 3 экранов</strong><small>за один раз</small></div>
+              <div><span className="stat-icon cyan"><Code2 className="size-4" /></span><strong>Готово к коду</strong><small>чистый экспорт</small></div>
+              <div><span className="stat-icon amber"><Sparkles className="size-4" /></span><strong>Точно и быстро</strong><small>AI + дизайн-токены</small></div>
+            </div>
+          </div>
+          <div className="hero-visual-wrap"><img src="/assets/hero-visual.png" alt="Графика Image to Interactive" className="hero-visual" /><span className="visual-chip chip-react">&lt;/&gt; React</span><span className="visual-chip chip-tailwind">&lt;/&gt; Tailwind</span></div>
+        </section>
 
-                <div className="flex rounded-lg border border-border p-0.5 text-xs">
-                  {(
-                    [
-                      ["off", "Просмотр"],
-                      ["inspect", "Инспектор"],
-                      ["copy", "Копировать блок"],
-                    ] as [PreviewMode, string][]
-                  ).map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      onClick={() => {
-                        setPreviewMode(mode);
-                        if (mode !== "off") setView("result");
-                      }}
-                      className={`rounded-md px-3 py-1.5 transition-colors ${
-                        previewMode === mode
-                          ? "bg-secondary text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        {mode === "inspect" ? <MousePointerClick className="size-3.5" /> : null}
-                        {mode === "copy" ? <Copy className="size-3.5" /> : null}
-                        {label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                <ProviderBadge used={result.provider} />
-
-                <Button variant="secondary" size="sm" onClick={openInNewWindow}>
-                  <ExternalLink className="size-4" /> В новом окне
-                </Button>
-
-                <ShareDialog projectId={result.projectId} deviceId={deviceId} />
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="secondary" size="sm">
-                      <Download className="size-4" /> Экспорт
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-60">
-                    <DropdownMenuItem
-                      onClick={() => downloadZip(result.html, options.framework, title)}
-                    >
-                      <FileArchive className="size-4" /> Скачать ZIP
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => downloadHtml(result.html, title)}>
-                      <Download className="size-4" /> Скачать HTML
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={copyAll}>
-                      <Copy className="size-4" /> Копировать весь код
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setPreviewMode("copy");
-                        setView("result");
-                        toast.info("Наведите на блок в превью и кликните — код скопируется");
-                      }}
-                    >
-                      <MousePointerClick className="size-4" /> Копировать компонент
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => openInCodeSandbox(result.html)}>
-                      <Code2 className="size-4" /> Открыть в CodeSandbox
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            ) : null}
+        <section className="workspace-grid">
+          <div className="control-card">
+            <div className="card-heading"><div><span>01</span><h3>Загрузка и настройки</h3></div><Activity className="size-4 text-muted-foreground" /></div>
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(Array.from(e.dataTransfer.files ?? [])); }}
+              onClick={() => !files.length && inputRef.current?.click()}
+              className={`upload-zone ${dragging ? "upload-zone-active" : ""} ${files.length ? "upload-zone-filled" : ""}`}
+            >
+              {files.length ? <div className="upload-filled"><div className="thumb-grid">{files.map((f, i) => <div key={`${f.name}-${i}`} className="thumb"><img src={f.dataUrl} alt={f.name} /><button onClick={(e) => { e.stopPropagation(); setFiles((prev) => prev.filter((_, idx) => idx !== i)); }}><X className="size-3" /></button><span>{i + 1}</span></div>)}{files.length < 3 && <button className="add-thumb" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}><Plus className="size-4" /></button>}</div><p className="mt-3 text-xs text-muted-foreground">До 3 экранов · PNG, JPG, WEBP · 10 МБ</p></div> : <><div className="upload-icon"><Upload className="size-5" /></div><p className="mt-3 text-sm font-semibold">Перетащите файлы сюда</p><p className="mt-1 text-xs text-muted-foreground">или нажмите для выбора · до 3 изображений</p></>}
+            </div>
+            <input ref={inputRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+            <GenerationOptionsPanel value={options} onChange={setOptions} disabled={busy} />
+            <Button className="primary-action" disabled={busy || !deviceId || !files.length} onClick={() => generate.mutate()}>{busy ? <><Loader2 className="size-4 animate-spin" /> Генерирую…</> : <><Wand2 className="size-4" /> Создать прототип</>}</Button>
+            {(busy || result) && <div className="progress-card"><div className="flex items-center justify-between text-xs"><span>{result ? "Прототип готов" : STEPS[step]}</span><span className="text-primary">{result ? "100%" : `${Math.round(((step + 1) / STEPS.length) * 100)}%`}</span></div><Progress value={((step + (result ? 1 : 0)) / STEPS.length) * 100} className="mt-2" /><div className="step-row">{STEPS.map((label, index) => <span key={label} className={result || index <= step ? "step-done" : ""}>{result || index < step ? <Check className="size-3" /> : index === step ? <Loader2 className="size-3 animate-spin" /> : <span className="step-dot" />} {label}</span>)}</div></div>}
+            <Disclaimer />
           </div>
 
-          {!result ? (
-            <div className="mt-10 flex h-[420px] flex-col items-center justify-center rounded-xl border border-dashed border-border text-center text-sm text-muted-foreground">
-              {busy ? (
-                <>
-                  <Loader2 className="size-6 animate-spin text-primary" />
-                  <p className="mt-3">{STEPS[step]}…</p>
-                </>
-              ) : (
-                <p>Здесь появится живое превью собранного прототипа</p>
-              )}
+          <div className="result-card">
+            <div className="result-toolbar">
+              <div className="card-heading compact"><div><span>02</span><h3>Результат</h3></div>{result && <span className="ready-badge"><span /> Готов к просмотру</span>}</div>
+              {result && <div className="result-actions"><div className="segmented">{([["result", "Превью"], ["split", "Рядом"], ["compare", "Сравнить"]] as [ViewMode, string][]).map(([mode, label]) => <button key={mode} onClick={() => setView(mode)} className={view === mode ? "active" : ""}>{mode === "compare" && <SplitSquareHorizontal className="size-3.5" />}{label}</button>)}</div><div className="segmented">{([["off", "Просмотр"], ["inspect", "Инспектор"], ["copy", "Копировать"]] as [PreviewMode, string][]).map(([mode, label]) => <button key={mode} onClick={() => { setPreviewMode(mode); if (mode !== "off") setView("result"); }} className={previewMode === mode ? "active" : ""}>{mode === "inspect" && <MousePointerClick className="size-3.5" />}{mode === "copy" && <Copy className="size-3.5" />}{label}</button>)}</div></div>}
             </div>
-          ) : (
-            <>
-              {view === "compare" && files[0] ? (
-                <div className="mt-4">
-                  <CompareSlider originalSrc={files[0].dataUrl} html={result.html} />
-                </div>
-              ) : (
-                <div
-                  className={`mt-4 grid gap-4 ${view === "split" ? "md:grid-cols-2" : "grid-cols-1"}`}
-                >
-                  {view === "split" && files[0] ? (
-                    <div className="max-h-[620px] overflow-auto rounded-xl border border-border bg-background/40 p-2">
-                      {files.map((f, index) => (
-                        <img
-                          key={`${f.name}-${index}`}
-                          src={f.dataUrl}
-                          alt={`Оригинал ${index + 1}`}
-                          className="mb-2 w-full rounded-lg"
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                  <PreviewFrame
-                    html={result.html}
-                    mode={previewMode}
-                    auditRequest={auditRequest}
-                    onAuditReport={(report) => {
-                      setA11yReport(report);
-                      setAuditRunning(false);
-                    }}
-                    onHtmlChange={(html) => setResult((prev) => (prev ? { ...prev, html } : prev))}
-                  />
-                </div>
-              )}
 
-              <A11yPanel
-                report={a11yReport}
-                running={auditRunning}
-                onRun={() => {
-                  if (view === "compare") setView("result");
-                  setAuditRunning(true);
-                  setAuditRequest((n) => n + 1);
-                }}
-              />
-
-              {result.analysis ? (
-                <details className="mt-4 rounded-xl border border-border p-4 text-sm">
-                  <summary className="cursor-pointer text-muted-foreground">
-                    Что распознано на макете
-                  </summary>
-                  <pre className="mt-3 whitespace-pre-wrap text-xs text-muted-foreground">
-                    {result.analysis}
-                  </pre>
-                </details>
-              ) : null}
-
-              <div className="mt-4 rounded-xl border border-border p-4">
-                <p className="text-sm font-medium">Запросить правки к этой версии</p>
-                {history.length ? (
-                  <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                    {history.map((item, index) => (
-                      <li key={`${item}-${index}`}>→ {item}</li>
-                    ))}
-                  </ul>
-                ) : null}
-                <form
-                  className="mt-3 flex gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (instruction.trim().length > 1) edit.mutate(instruction.trim());
-                  }}
-                >
-                  <Input
-                    value={instruction}
-                    onChange={(e) => setInstruction(e.target.value)}
-                    placeholder="Например: сделай хедер sticky, кнопки — изумрудными"
-                    disabled={edit.isPending}
-                  />
-                  <Button type="submit" disabled={edit.isPending || instruction.trim().length < 2}>
-                    {edit.isPending ? <Loader2 className="size-4 animate-spin" /> : "Применить"}
-                  </Button>
-                </form>
-              </div>
-
-              <p className="mt-3 text-xs text-muted-foreground">
-                Проект сохранён —{" "}
-                <Link to="/projects" className="text-primary hover:underline">
-                  открыть мои проекты
-                </Link>
-              </p>
-            </>
-          )}
-        </div>
-      </section>
-    </main>
+            {!result ? <div className="empty-preview"><div className="empty-orbit"><div className="empty-core"><Sparkles className="size-6" /></div></div><h4>{busy ? `${STEPS[step]}…` : "Ваш прототип появится здесь"}</h4><p>{busy ? "AI собирает структуру, компоненты и интерактив." : "Загрузите макет слева, чтобы начать генерацию."}</p><div className="empty-hints"><span><Check className="size-3" /> HTML / Tailwind</span><span><Check className="size-3" /> React / Lucide</span><span><Check className="size-3" /> Vue 3</span></div></div> : <>
+              {view === "compare" && files[0] ? <div className="mt-4"><CompareSlider originalSrc={files[0].dataUrl} html={result.html} /></div> : <div className={`preview-area ${view === "split" ? "preview-split" : ""}`}>{view === "split" && files[0] ? <div className="original-stack">{files.map((f, index) => <img key={`${f.name}-${index}`} src={f.dataUrl} alt={`Оригинал ${index + 1}`} />)}</div> : null}<PreviewFrame html={result.html} mode={previewMode} auditRequest={auditRequest} onAuditReport={(report) => { setA11yReport(report); setAuditRunning(false); }} onHtmlChange={(html) => setResult((prev) => prev ? { ...prev, html } : prev)} /></div>}
+              <div className="result-footer-actions"><button onClick={openInNewWindow}><ExternalLink className="size-4" /><span><strong>Открыть в новой вкладке</strong><small>Просмотр в браузере</small></span><ArrowUpRight className="ml-auto size-4" /></button><button onClick={copyAll}><Code2 className="size-4" /><span><strong>Скопировать код</strong><small>В буфер обмена</small></span></button><DropdownMenu><DropdownMenuTrigger asChild><button><Download className="size-4" /><span><strong>Скачать прототип</strong><small>HTML или ZIP</small></span></button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={() => downloadZip(result.html, options.framework, title)}><FileArchive className="size-4" /> Скачать ZIP</DropdownMenuItem><DropdownMenuItem onClick={() => downloadHtml(result.html, title)}><Download className="size-4" /> Скачать HTML</DropdownMenuItem><DropdownMenuItem onClick={() => openInCodeSandbox(result.html)}><Code2 className="size-4" /> CodeSandbox</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div>
+              <A11yPanel report={a11yReport} running={auditRunning} onRun={() => { if (view === "compare") setView("result"); setAuditRunning(true); setAuditRequest((n) => n + 1); }} />
+              {result.analysis ? <details className="analysis-box"><summary>Что распознано на макете</summary><pre>{result.analysis}</pre></details> : null}
+              <div className="edit-box"><div><p className="text-sm font-semibold">Запросить правки к этой версии</p><p className="text-xs text-muted-foreground">Опишите, что нужно изменить — AI обновит текущий прототип.</p></div>{history.length ? <div className="history-line">{history.slice(-3).map((item, index) => <span key={`${item}-${index}`}>→ {item}</span>)}</div> : null}<form onSubmit={(e) => { e.preventDefault(); if (instruction.trim().length > 1) edit.mutate(instruction.trim()); }}><Input value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Например: сделай хедер sticky и добавь CTA" disabled={edit.isPending} /><Button type="submit" disabled={edit.isPending || instruction.trim().length < 2}>{edit.isPending ? <Loader2 className="size-4 animate-spin" /> : "Применить"}</Button></form></div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><ProviderBadge used={result.provider} /><span>Проект сохранён.</span><Link to="/projects" className="text-primary hover:underline">Открыть мои проекты</Link><ShareDialog projectId={result.projectId} deviceId={deviceId} /></div>
+            </>}
+          </div>
+        </section>
+      </main>
+    </div>
   );
 }

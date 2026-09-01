@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 import { toast } from "sonner";
 
 import type { A11yReport } from "@/lib/a11y-audit";
@@ -12,6 +12,7 @@ type Props = {
   auditRequest?: number;
   onAuditReport?: (report: A11yReport) => void;
   className?: string;
+  frameRef?: RefObject<HTMLIFrameElement | null>;
 };
 
 export function PreviewFrame({
@@ -21,9 +22,11 @@ export function PreviewFrame({
   auditRequest = 0,
   onAuditReport,
   className,
+  frameRef,
 }: Props) {
   const srcDoc = useMemo(() => withPreviewTools(html, mode), [html, mode]);
-  const frameRef = useRef<HTMLIFrameElement>(null);
+  const localFrameRef = useRef<HTMLIFrameElement>(null);
+  const resolvedFrameRef = frameRef ?? localFrameRef;
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -52,17 +55,17 @@ export function PreviewFrame({
   useEffect(() => {
     if (!auditRequest) return;
     const timer = setTimeout(() => {
-      frameRef.current?.contentWindow?.postMessage({ __ip: "a11y_run" }, "*");
+      resolvedFrameRef.current?.contentWindow?.postMessage({ __ip: "a11y_run" }, "*");
     }, 120);
     return () => clearTimeout(timer);
-  }, [auditRequest]);
+  }, [auditRequest, resolvedFrameRef]);
 
   return (
     <iframe
-      ref={frameRef}
+      ref={resolvedFrameRef}
       title="Сгенерированная страница"
       srcDoc={srcDoc}
-      sandbox="allow-scripts allow-forms allow-popups"
+      sandbox="allow-scripts allow-forms allow-popups allow-same-origin"
       className={className ?? "h-[620px] w-full rounded-xl border border-border bg-white"}
     />
   );
