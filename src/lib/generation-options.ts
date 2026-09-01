@@ -74,6 +74,46 @@ export type TokenPreset = {
   options: Pick<GenerationOptions, "primaryColor" | "secondaryColor" | "backgroundColor" | "surfaceColor" | "textColor" | "mutedColor" | "borderColor" | "fontFamily" | "radius" | "spacing" | "shadow">;
 };
 
+/** Готовые дизайн-шаблоны, применяются к настройкам генерации одним кликом. */
+export const DESIGN_TEMPLATES: Array<{ id: string; name: string; description: string; options: Partial<GenerationOptions> }> = [
+  {
+    id: "dark-saas",
+    name: "Dark SaaS",
+    description: "Тёмный интерфейс, фиолетовый акцент, мягкие тени",
+    options: { primaryColor: "#8B5CF6", secondaryColor: "#6D5DF5", backgroundColor: "#070B16", surfaceColor: "#111827", textColor: "#F8FAFC", mutedColor: "#94A3B8", borderColor: "#263247", fontFamily: "Inter", radius: "md", spacing: "balanced", shadow: "soft" },
+  },
+  {
+    id: "light-minimal",
+    name: "Light Minimal",
+    description: "Светлый минимализм, много воздуха, без теней",
+    options: { primaryColor: "#111827", secondaryColor: "#4B5563", backgroundColor: "#FFFFFF", surfaceColor: "#F8FAFC", textColor: "#0F172A", mutedColor: "#64748B", borderColor: "#E2E8F0", fontFamily: "Plus Jakarta Sans", radius: "sm", spacing: "airy", shadow: "none" },
+  },
+  {
+    id: "fintech",
+    name: "Fintech",
+    description: "Строгая сетка, синий акцент, компактные отступы",
+    options: { primaryColor: "#2563EB", secondaryColor: "#0EA5E9", backgroundColor: "#0B1220", surfaceColor: "#111C31", textColor: "#EAF2FF", mutedColor: "#8FA3C0", borderColor: "#1E2C46", fontFamily: "Inter", radius: "sm", spacing: "compact", shadow: "strong" },
+  },
+  {
+    id: "commerce",
+    name: "E-commerce",
+    description: "Светлая витрина, крупные радиусы, тёплый акцент",
+    options: { primaryColor: "#F59E0B", secondaryColor: "#EF4444", backgroundColor: "#FFFDF8", surfaceColor: "#FFFFFF", textColor: "#1C1917", mutedColor: "#78716C", borderColor: "#EDE7DD", fontFamily: "Outfit", radius: "lg", spacing: "balanced", shadow: "soft" },
+  },
+  {
+    id: "brutalist",
+    name: "Brutalist",
+    description: "Контраст, острые углы, выраженные тени",
+    options: { primaryColor: "#10B981", secondaryColor: "#000000", backgroundColor: "#FFFFFF", surfaceColor: "#F5F5F5", textColor: "#000000", mutedColor: "#525252", borderColor: "#000000", fontFamily: "Roboto", radius: "sm", spacing: "compact", shadow: "strong" },
+  },
+  {
+    id: "editorial",
+    name: "Editorial",
+    description: "Журнальная типографика, спокойные цвета",
+    options: { primaryColor: "#7C3AED", secondaryColor: "#DB2777", backgroundColor: "#FBFAF9", surfaceColor: "#FFFFFF", textColor: "#1F2937", mutedColor: "#6B7280", borderColor: "#E7E5E4", fontFamily: "Outfit", radius: "lg", spacing: "airy", shadow: "soft" },
+  },
+];
+
 const FRAMEWORK_RULES: Record<FrameworkId, string> = {
   html: `Формат вывода: ОДИН самодостаточный HTML-документ. Tailwind через CDN (https://cdn.tailwindcss.com), логика — чистый JS в <script>.`,
   react: `Формат вывода: ОДИН HTML-документ, внутри которого React 18 через CDN и Babel Standalone. Код пиши как чистые React-компоненты. Иконки — только Lucide. Стилизация — Tailwind CDN.`,
