@@ -196,7 +196,7 @@ function Index() {
               <div><span className="stat-icon amber"><Sparkles className="size-4" /></span><strong>Точно и быстро</strong><small>AI + дизайн-токены</small></div>
             </div>
           </div>
-          <div className="hero-visual-wrap"><img src="/assets/hero-visual.png" alt="Графика Image to Interactive" className="hero-visual" /><span className="visual-chip chip-react">&lt;/&gt; React</span><span className="visual-chip chip-tailwind">&lt;/&gt; Tailwind</span></div>
+          <div className="hero-visual-wrap"><img src={heroVisual.url} alt="Графика Image to Interactive" className="hero-visual" /><span className="visual-chip chip-react">&lt;/&gt; React</span><span className="visual-chip chip-tailwind">&lt;/&gt; Tailwind</span></div>
         </section>
 
         <section className="workspace-grid">
