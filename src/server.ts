@@ -44,9 +44,72 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+async function serveSharedPrototype(request: Request): Promise<Response | null> {
+  const url = new URL(request.url);
+  const match = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{8,64})\/?$/);
+  if (!match || request.method !== "GET") return null;
+
+  try {
+    const { admin } = await import("./lib/generate.server");
+    const db = admin();
+    const { data: project } = await db
+      .from("projects")
+      .select("id, title, generated_html, share_visibility, share_token")
+      .eq("share_token", match[1]!)
+      .maybeSingle();
+
+    if (!project || project.share_visibility === "private" || !project.generated_html) {
+      return new Response("<h1>Страница недоступна</h1>", {
+        status: 404,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
+
+    // A "link" share is intentionally served as the generated HTML itself.
+    // The "users" mode stays on the app route so its authenticated serverFn
+    // can validate the invited account before returning the preview.
+    if (project.share_visibility !== "link") return null;
+
+    let html = project.generated_html.trim();
+    if (!/^<!doctype html/i.test(html)) {
+      html = `<!doctype html><html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(project.title)}</title></head><body>${html}</body></html>`;
+    }
+
+    // The share URL is a standalone website, not an app page containing an iframe.
+    return new Response(html, {
+      status: 200,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "private, no-store",
+        "content-security-policy": "frame-ancestors 'self'",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  } catch (error) {
+    console.error("Shared prototype error", error);
+    return new Response("<h1>Не удалось открыть прототип</h1>", {
+      status: 500,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>'\"]/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '\"': "&quot;",
+  })[char] ?? char);
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const sharedResponse = await serveSharedPrototype(request);
+      if (sharedResponse) return sharedResponse;
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

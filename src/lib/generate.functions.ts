@@ -8,12 +8,20 @@ import {
 } from "./generation-options";
 
 const OptionsSchema = z.object({
-  framework: z.enum(["html", "react", "vue"]).default("html"),
+  framework: z.enum(["html", "react", "vue"]).default(DEFAULT_OPTIONS.framework),
   primaryColor: z.string().min(3).max(32).default(DEFAULT_OPTIONS.primaryColor),
-  fontFamily: z.enum(["Inter", "Roboto", "Plus Jakarta Sans", "Outfit"]).default("Inter"),
-  radius: z.enum(["sm", "md", "lg", "full"]).default("md"),
-  enhanceText: z.boolean().default(false),
-  themeToggle: z.boolean().default(true),
+  secondaryColor: z.string().min(3).max(32).default(DEFAULT_OPTIONS.secondaryColor),
+  backgroundColor: z.string().min(3).max(32).default(DEFAULT_OPTIONS.backgroundColor),
+  surfaceColor: z.string().min(3).max(32).default(DEFAULT_OPTIONS.surfaceColor),
+  textColor: z.string().min(3).max(32).default(DEFAULT_OPTIONS.textColor),
+  mutedColor: z.string().min(3).max(32).default(DEFAULT_OPTIONS.mutedColor),
+  borderColor: z.string().min(3).max(32).default(DEFAULT_OPTIONS.borderColor),
+  fontFamily: z.enum(["Inter", "Roboto", "Plus Jakarta Sans", "Outfit"]).default(DEFAULT_OPTIONS.fontFamily),
+  radius: z.enum(["sm", "md", "lg", "full"]).default(DEFAULT_OPTIONS.radius),
+  spacing: z.enum(["compact", "balanced", "airy"]).default(DEFAULT_OPTIONS.spacing),
+  shadow: z.enum(["none", "soft", "strong"]).default(DEFAULT_OPTIONS.shadow),
+  enhanceText: z.boolean().default(DEFAULT_OPTIONS.enhanceText),
+  themeToggle: z.boolean().default(DEFAULT_OPTIONS.themeToggle),
 });
 
 const GenerateInput = z.object({
@@ -91,7 +99,7 @@ export const generatePage = createServerFn({ method: "POST" })
         .from("projects")
         .update({
           generated_html: cached.result,
-          component_map: { analysis: cached.analysis ?? "", provider: "cache" },
+          component_map: { analysis: cached.analysis ?? "", provider: "cache", options: data.options },
           status: "completed",
         })
         .eq("id", project.id);
@@ -121,7 +129,7 @@ export const generatePage = createServerFn({ method: "POST" })
         .from("projects")
         .update({
           generated_html: html,
-          component_map: { analysis, provider },
+          component_map: { analysis, provider, options: data.options },
           status: "completed",
         })
         .eq("id", project.id);
@@ -145,7 +153,7 @@ export const editPage = createServerFn({ method: "POST" })
 
     const { data: project } = await db
       .from("projects")
-      .select("id, user_id, device_id, generated_html")
+      .select("id, user_id, device_id, generated_html, component_map")
       .eq("id", data.projectId)
       .maybeSingle();
     if (!project) throw new Error("Проект не найден.");
@@ -165,7 +173,11 @@ export const editPage = createServerFn({ method: "POST" })
         .from("projects")
         .update({
           generated_html: html,
-          component_map: { analysis, provider },
+          component_map: {
+            ...((project.component_map as Record<string, unknown> | null) ?? {}),
+            analysis,
+            provider,
+          },
           status: "completed",
         })
         .eq("id", project.id);
@@ -205,6 +217,36 @@ export const listProjects = createServerFn({ method: "POST" })
     return { projects, signedIn: Boolean(userId) };
   });
 
+
+export const deleteProject = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z.object({ id: z.string().uuid(), deviceId: z.string().min(1) }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { admin, optionalUserId } = await import("./generate.server");
+    const db = admin();
+    const userId = await optionalUserId();
+
+    const { data: project } = await db
+      .from("projects")
+      .select("id, user_id, device_id, source_image_url")
+      .eq("id", data.id)
+      .maybeSingle();
+
+    if (!project) throw new Error("Проект не найден.");
+    const owns = userId ? project.user_id === userId : project.device_id === data.deviceId && !project.user_id;
+    if (!owns) throw new Error("Нет доступа к этому проекту.");
+
+    const { error } = await db.from("projects").delete().eq("id", project.id);
+    if (error) throw new Error("Не удалось удалить проект.");
+
+    if (project.source_image_url) {
+      await db.storage.from("screenshots").remove([project.source_image_url]);
+    }
+
+    return { deleted: true, id: project.id };
+  });
+
 export const getProject = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z.object({ id: z.string().uuid(), deviceId: z.string().min(1) }).parse(input),
@@ -229,6 +271,7 @@ export const getProject = createServerFn({ method: "POST" })
       status: project.status,
       html: project.generated_html,
       analysis: (project.component_map as { analysis?: string } | null)?.analysis ?? "",
+      options: (project.component_map as { options?: GenerationOptions } | null)?.options ?? DEFAULT_OPTIONS,
       image_url: await signedUrl(project.source_image_url),
     };
   });

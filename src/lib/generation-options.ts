@@ -1,11 +1,10 @@
-/** Общие настройки генерации: стек, дизайн-токены, флаги. Клиент + сервер. */
+/** Настройки генерации и дизайн-система прототипа. Клиент + сервер. */
 
 export const FRAMEWORKS = [
   { id: "html", label: "HTML + Tailwind", hint: "Один самодостаточный файл" },
   { id: "react", label: "React + Tailwind + Lucide", hint: "JSX-компоненты, иконки Lucide" },
   { id: "vue", label: "Vue 3 + Tailwind", hint: "SFC-подобная структура" },
 ] as const;
-
 export type FrameworkId = (typeof FRAMEWORKS)[number]["id"];
 
 export const FONTS = ["Inter", "Roboto", "Plus Jakarta Sans", "Outfit"] as const;
@@ -19,73 +18,92 @@ export const RADII = [
 ] as const;
 export type RadiusId = (typeof RADII)[number]["id"];
 
+export const SPACING = [
+  { id: "compact", label: "Компактный", value: "0.75" },
+  { id: "balanced", label: "Сбалансированный", value: "1" },
+  { id: "airy", label: "Воздушный", value: "1.25" },
+] as const;
+export type SpacingId = (typeof SPACING)[number]["id"];
+
+export const SHADOWS = [
+  { id: "none", label: "Без теней", value: "none" },
+  { id: "soft", label: "Мягкие", value: "0 8px 30px rgba(15,23,42,.10)" },
+  { id: "strong", label: "Выраженные", value: "0 16px 50px rgba(15,23,42,.18)" },
+] as const;
+export type ShadowId = (typeof SHADOWS)[number]["id"];
+
 export type GenerationOptions = {
   framework: FrameworkId;
   primaryColor: string;
+  secondaryColor: string;
+  backgroundColor: string;
+  surfaceColor: string;
+  textColor: string;
+  mutedColor: string;
+  borderColor: string;
   fontFamily: FontId;
   radius: RadiusId;
+  spacing: SpacingId;
+  shadow: ShadowId;
   enhanceText: boolean;
   themeToggle: boolean;
 };
 
 export const DEFAULT_OPTIONS: GenerationOptions = {
   framework: "html",
-  primaryColor: "#F5A524",
+  primaryColor: "#8B5CF6",
+  secondaryColor: "#6D5DF5",
+  backgroundColor: "#070B16",
+  surfaceColor: "#111827",
+  textColor: "#F8FAFC",
+  mutedColor: "#94A3B8",
+  borderColor: "#263247",
   fontFamily: "Inter",
   radius: "md",
+  spacing: "balanced",
+  shadow: "soft",
   enhanceText: false,
   themeToggle: true,
 };
 
-export const PRESET_COLORS = [
-  "#F5A524",
-  "#10B981",
-  "#3B82F6",
-  "#E11D48",
-  "#8B5CF6",
-  "#0EA5E9",
-] as const;
+export const PRESET_COLORS = ["#8B5CF6", "#7C3AED", "#06B6D4", "#10B981", "#3B82F6", "#F59E0B", "#EF4444"] as const;
+
+export type TokenPreset = {
+  id: string;
+  name: string;
+  options: Pick<GenerationOptions, "primaryColor" | "secondaryColor" | "backgroundColor" | "surfaceColor" | "textColor" | "mutedColor" | "borderColor" | "fontFamily" | "radius" | "spacing" | "shadow">;
+};
 
 const FRAMEWORK_RULES: Record<FrameworkId, string> = {
   html: `Формат вывода: ОДИН самодостаточный HTML-документ. Tailwind через CDN (https://cdn.tailwindcss.com), логика — чистый JS в <script>.`,
-  react: `Формат вывода: ОДИН HTML-документ, внутри которого React 18 через CDN (react, react-dom UMD) и Babel Standalone.
-Код пиши как чистые React-компоненты с хуками (function Header(){...}) в <script type="text/babel">, разбей страницу на осмысленные компоненты (Header, Hero, Features, FAQ, Footer).
-Иконки — только Lucide (подключи https://unpkg.com/lucide@latest и рендери через lucide.createIcons(), либо inline SVG из набора Lucide). Стилизация — Tailwind CDN.`,
-  vue: `Формат вывода: ОДИН HTML-документ, внутри которого Vue 3 через CDN (https://unpkg.com/vue@3/dist/vue.global.js).
-Код пиши компонентами Composition API (setup(), ref, computed), смонтированными в #app, разбей страницу на осмысленные компоненты. Стилизация — Tailwind CDN. Иконки — Lucide (inline SVG из набора Lucide).`,
+  react: `Формат вывода: ОДИН HTML-документ, внутри которого React 18 через CDN и Babel Standalone. Код пиши как чистые React-компоненты. Иконки — только Lucide. Стилизация — Tailwind CDN.`,
+  vue: `Формат вывода: ОДИН HTML-документ, внутри которого Vue 3 через CDN. Код пиши компонентами Composition API. Стилизация — Tailwind CDN. Иконки — Lucide.`,
 };
 
-/** Формирует директиву для модели по выбранным настройкам. */
 export function buildOptionsDirective(options: GenerationOptions, pageCount: number): string {
   const radius = RADII.find((r) => r.id === options.radius)?.value ?? "12px";
+  const spacing = SPACING.find((r) => r.id === options.spacing)?.value ?? "1";
+  const shadow = SHADOWS.find((r) => r.id === options.shadow)?.value ?? SHADOWS[1].value;
   const lines = [
     FRAMEWORK_RULES[options.framework],
-    `Дизайн-токены (задай их в :root и используй везде, не хардкодь другие значения):
-- --brand: ${options.primaryColor} — основной/акцентный цвет кнопок, ссылок, активных состояний
-- --radius: ${radius} — скругление кнопок, полей, карточек
-- Шрифт: "${options.fontFamily}" (подключи Google Fonts), fallback — system-ui`,
-    `Иконки: используй ТОЛЬКО иконки из набора Lucide (правильные имена: menu, x, chevron-down, arrow-right, check, star, mail, phone, sun, moon). Никаких эмодзи и случайных заглушек.`,
+    `ДИЗАЙН-СИСТЕМА — это обязательные токены. Создай CSS variables в :root и используй их последовательно, не хардкодь другие значения:
+- --brand: ${options.primaryColor}
+- --brand-secondary: ${options.secondaryColor}
+- --background: ${options.backgroundColor}
+- --surface: ${options.surfaceColor}
+- --text: ${options.textColor}
+- --muted: ${options.mutedColor}
+- --border: ${options.borderColor}
+- --radius: ${radius}
+- --spacing-scale: ${spacing}
+- --shadow: ${shadow}
+- font-family: "${options.fontFamily}", system-ui, sans-serif
+Используй токены для фона, карточек, текста, границ, CTA, hover/focus, форм, навигации и декоративных элементов. Для контрастных состояний автоматически подбирай оттенки от этих базовых цветов.`,
+    `Иконки: только Lucide. Никаких эмодзи и случайных заглушек.`,
   ];
-
-  if (options.themeToggle) {
-    lines.push(
-      `Обязательно добавь в шапку рабочий переключатель светлой/тёмной темы (иконки sun/moon): он переключает класс "dark" на <html>, все цвета описаны через CSS-переменные для обеих тем, выбор сохраняется в localStorage.`,
-    );
-  }
-
-  if (options.enhanceText) {
-    lines.push(
-      `Улучшение текста ВКЛЮЧЕНО: если текст на скриншоте нечитаем, размыт или это Lorem Ipsum — не копируй его, а напиши осмысленный продающий копирайт на русском языке, соответствующий тематике и контексту блока (заголовки, подзаголовки, буллеты, CTA).`,
-    );
-  } else {
-    lines.push(`Улучшение текста выключено: переноси текст со скриншота максимально дословно.`);
-  }
-
-  if (pageCount > 1) {
-    lines.push(
-      `Загружено ${pageCount} экрана — собери многостраничный прототип В ОДНОМ файле: каждая страница это отдельная секция/компонент, переключение через рабочую навигацию (клик по пункту меню или кнопке показывает нужную страницу, обновляет hash в адресе и активный пункт меню). Ссылки между страницами обязаны работать.`,
-    );
-  }
-
+  if (options.themeToggle) lines.push(`Добавь рабочий переключатель светлой/тёмной темы. Обе темы должны использовать отдельный набор CSS variables, выбор сохраняется в localStorage.`);
+  if (options.enhanceText) lines.push(`Улучшение текста ВКЛЮЧЕНО: восстанови нечитаемый текст осмысленным продающим копирайтом на русском языке.`);
+  else lines.push(`Улучшение текста выключено: переноси текст со скриншота максимально дословно.`);
+  if (pageCount > 1) lines.push(`Загружено ${pageCount} экрана — собери многостраничный прототип в одном файле с рабочей навигацией и hash.`);
   return `\n\nНАСТРОЙКИ ПОЛЬЗОВАТЕЛЯ (высший приоритет):\n${lines.join("\n\n")}`;
 }
