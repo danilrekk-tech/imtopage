@@ -47,6 +47,7 @@ import { downloadHtml, downloadZip, openInCodeSandbox } from "@/lib/export-tools
 import type { A11yReport } from "@/lib/a11y-audit";
 import type { PreviewMode } from "@/lib/preview-inject";
 import { openHtmlInNewWindow } from "@/lib/preview-window";
+import heroVisual from "@/assets/hero-visual.png.asset.json";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -196,7 +197,7 @@ function Index() {
               <div><span className="stat-icon amber"><Sparkles className="size-4" /></span><strong>Точно и быстро</strong><small>AI + дизайн-токены</small></div>
             </div>
           </div>
-          <div className="hero-visual-wrap"><img src="/assets/hero-visual.png" alt="Графика Image to Interactive" className="hero-visual" /><span className="visual-chip chip-react">&lt;/&gt; React</span><span className="visual-chip chip-tailwind">&lt;/&gt; Tailwind</span></div>
+          <div className="hero-visual-wrap"><img src={heroVisual.url} alt="Графика Image to Interactive" className="hero-visual" /><span className="visual-chip chip-react">&lt;/&gt; React</span><span className="visual-chip chip-tailwind">&lt;/&gt; Tailwind</span></div>
         </section>
 
         <section className="workspace-grid">
