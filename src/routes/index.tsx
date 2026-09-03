@@ -163,6 +163,24 @@ function Index() {
     try { await navigator.clipboard.writeText(result.html); toast.success("Весь код скопирован"); }
     catch { toast.error("Браузер не дал доступ к буферу обмена"); }
   };
+  const scrollToTokens = () => {
+    optionsRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    toast.info("Дизайн-токены — в панели настроек слева");
+  };
+  const applyTemplate = (id: string) => {
+    const template = DESIGN_TEMPLATES.find((t) => t.id === id);
+    if (!template) return;
+    const next = { ...options, ...template.options };
+    setOptions(next);
+    try { localStorage.setItem("imtopage-token-draft", JSON.stringify(template.options)); } catch { /* storage may be blocked */ }
+    setTemplatesOpen(false);
+    toast.success(`Шаблон «${template.name}» применён`);
+  };
+  const exportCode = () => {
+    if (!result) { toast.error("Сначала сгенерируйте прототип"); return; }
+    downloadZip(result.html, options.framework, title);
+  };
+
 
   const busy = generate.isPending;
   const title = files[0]?.name.replace(/\.[^.]+$/, "") ?? "prototype";
