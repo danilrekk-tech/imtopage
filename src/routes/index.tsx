@@ -81,6 +81,11 @@ function Index() {
   const [instruction, setInstruction] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const optionsRef = useRef<HTMLDivElement>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+
   const queryClient = useQueryClient();
   useEffect(() => setDeviceId(getDeviceId()), []);
   useEffect(() => {
