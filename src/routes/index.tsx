@@ -202,7 +202,7 @@ function Index() {
         <div className="sidebar-help">
           <div className="sidebar-help-icon"><Rocket className="size-4" /></div>
           <div><p className="text-sm font-semibold">Как это работает?</p><p className="mt-1 text-xs text-muted-foreground">Загрузите макет — получите код.</p></div>
-          <button className="sidebar-help-button">Посмотреть</button>
+          <button className="sidebar-help-button" onClick={() => setHelpOpen(true)}>Посмотреть</button>
         </div>
         <div className="sidebar-user"><div className="avatar">IP</div><div className="min-w-0"><p className="truncate text-xs font-semibold">Ваш проект</p><p className="truncate text-[11px] text-muted-foreground">Рабочее пространство</p></div></div>
       </aside>
