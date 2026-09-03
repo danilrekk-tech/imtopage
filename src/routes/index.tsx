@@ -33,6 +33,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { Disclaimer } from "@/components/Disclaimer";
 import { CompareSlider } from "@/components/CompareSlider";
 import { GenerationOptionsPanel } from "@/components/GenerationOptionsPanel";
@@ -42,8 +44,9 @@ import { ProviderBadge } from "@/components/ProviderBadge";
 import { ShareDialog } from "@/components/ShareDialog";
 import { getDeviceId } from "@/lib/device";
 import { editPage, generatePage } from "@/lib/generate.functions";
-import { DEFAULT_OPTIONS, type GenerationOptions } from "@/lib/generation-options";
+import { DEFAULT_OPTIONS, DESIGN_TEMPLATES, FRAMEWORKS, type GenerationOptions } from "@/lib/generation-options";
 import { downloadHtml, downloadZip, openInCodeSandbox } from "@/lib/export-tools";
+
 import type { A11yReport } from "@/lib/a11y-audit";
 import type { PreviewMode } from "@/lib/preview-inject";
 import { openHtmlInNewWindow } from "@/lib/preview-window";
@@ -78,6 +81,11 @@ function Index() {
   const [instruction, setInstruction] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const optionsRef = useRef<HTMLDivElement>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+
   const queryClient = useQueryClient();
   useEffect(() => setDeviceId(getDeviceId()), []);
   useEffect(() => {
@@ -155,6 +163,24 @@ function Index() {
     try { await navigator.clipboard.writeText(result.html); toast.success("Весь код скопирован"); }
     catch { toast.error("Браузер не дал доступ к буферу обмена"); }
   };
+  const scrollToTokens = () => {
+    optionsRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    toast.info("Дизайн-токены — в панели настроек слева");
+  };
+  const applyTemplate = (id: string) => {
+    const template = DESIGN_TEMPLATES.find((t) => t.id === id);
+    if (!template) return;
+    const next = { ...options, ...template.options };
+    setOptions(next);
+    try { localStorage.setItem("imtopage-token-draft", JSON.stringify(template.options)); } catch { /* storage may be blocked */ }
+    setTemplatesOpen(false);
+    toast.success(`Шаблон «${template.name}» применён`);
+  };
+  const exportCode = () => {
+    if (!result) { toast.error("Сначала сгенерируйте прототип"); return; }
+    downloadZip(result.html, options.framework, title);
+  };
+
 
   const busy = generate.isPending;
   const title = files[0]?.name.replace(/\.[^.]+$/, "") ?? "prototype";
@@ -165,17 +191,18 @@ function Index() {
         <div className="sidebar-section">
           <Link to="/" className="sidebar-item sidebar-active"><Sparkles className="size-4" /> Новый прототип</Link>
           <Link to="/projects" className="sidebar-item"><FolderKanban className="size-4" /> Мои проекты</Link>
-          <button className="sidebar-item"><LayoutTemplate className="size-4" /> Шаблоны дизайна</button>
-          <button className="sidebar-item"><Palette className="size-4" /> Дизайн-токены</button>
-          <button className="sidebar-item"><History className="size-4" /> История генераций</button>
-          <button className="sidebar-item"><Download className="size-4" /> Экспорт кода</button>
-          <button className="sidebar-item"><Settings2 className="size-4" /> Настройки</button>
+          <button className="sidebar-item" onClick={() => setTemplatesOpen(true)}><LayoutTemplate className="size-4" /> Шаблоны дизайна</button>
+          <button className="sidebar-item" onClick={scrollToTokens}><Palette className="size-4" /> Дизайн-токены</button>
+          <Link to="/projects" className="sidebar-item"><History className="size-4" /> История генераций</Link>
+          <button className="sidebar-item" onClick={exportCode}><Download className="size-4" /> Экспорт кода</button>
+          <button className="sidebar-item" onClick={() => setSettingsOpen(true)}><Settings2 className="size-4" /> Настройки</button>
+
         </div>
         <div className="sidebar-divider" />
         <div className="sidebar-help">
           <div className="sidebar-help-icon"><Rocket className="size-4" /></div>
           <div><p className="text-sm font-semibold">Как это работает?</p><p className="mt-1 text-xs text-muted-foreground">Загрузите макет — получите код.</p></div>
-          <button className="sidebar-help-button">Посмотреть</button>
+          <button className="sidebar-help-button" onClick={() => setHelpOpen(true)}>Посмотреть</button>
         </div>
         <div className="sidebar-user"><div className="avatar">IP</div><div className="min-w-0"><p className="truncate text-xs font-semibold">Ваш проект</p><p className="truncate text-[11px] text-muted-foreground">Рабочее пространство</p></div></div>
       </aside>
@@ -213,7 +240,7 @@ function Index() {
               {files.length ? <div className="upload-filled"><div className="thumb-grid">{files.map((f, i) => <div key={`${f.name}-${i}`} className="thumb"><img src={f.dataUrl} alt={f.name} /><button onClick={(e) => { e.stopPropagation(); setFiles((prev) => prev.filter((_, idx) => idx !== i)); }}><X className="size-3" /></button><span>{i + 1}</span></div>)}{files.length < 3 && <button className="add-thumb" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}><Plus className="size-4" /></button>}</div><p className="mt-3 text-xs text-muted-foreground">До 3 экранов · PNG, JPG, WEBP · 10 МБ</p></div> : <><div className="upload-icon"><Upload className="size-5" /></div><p className="mt-3 text-sm font-semibold">Перетащите файлы сюда</p><p className="mt-1 text-xs text-muted-foreground">или нажмите для выбора · до 3 изображений</p></>}
             </div>
             <input ref={inputRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
-            <GenerationOptionsPanel value={options} onChange={setOptions} disabled={busy} />
+            <div ref={optionsRef}><GenerationOptionsPanel value={options} onChange={setOptions} disabled={busy} /></div>
             <Button className="primary-action" disabled={busy || !deviceId || !files.length} onClick={() => generate.mutate()}>{busy ? <><Loader2 className="size-4 animate-spin" /> Генерирую…</> : <><Wand2 className="size-4" /> Создать прототип</>}</Button>
             {(busy || result) && <div className="progress-card"><div className="flex items-center justify-between text-xs"><span>{result ? "Прототип готов" : STEPS[step]}</span><span className="text-primary">{result ? "100%" : `${Math.round(((step + 1) / STEPS.length) * 100)}%`}</span></div><Progress value={((step + (result ? 1 : 0)) / STEPS.length) * 100} className="mt-2" /><div className="step-row">{STEPS.map((label, index) => <span key={label} className={result || index <= step ? "step-done" : ""}>{result || index < step ? <Check className="size-3" /> : index === step ? <Loader2 className="size-3 animate-spin" /> : <span className="step-dot" />} {label}</span>)}</div></div>}
             <Disclaimer />
@@ -236,6 +263,75 @@ function Index() {
           </div>
         </section>
       </main>
+
+      <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Шаблоны дизайна</DialogTitle>
+            <DialogDescription>Один клик — и цвета, шрифт, радиусы и тени применятся к следующей генерации.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {DESIGN_TEMPLATES.map((template) => (
+              <button key={template.id} type="button" onClick={() => applyTemplate(template.id)} className="rounded-xl border border-border p-3 text-left transition-colors hover:border-primary hover:bg-secondary/40">
+                <div className="flex items-center gap-1.5">
+                  {[template.options.primaryColor, template.options.secondaryColor, template.options.backgroundColor, template.options.surfaceColor, template.options.borderColor].map((color, i) => (
+                    <span key={`${template.id}-${i}`} className="size-5 rounded-md border border-white/10" style={{ backgroundColor: color }} />
+                  ))}
+                </div>
+                <p className="mt-2 text-sm font-semibold">{template.name}</p>
+                <p className="text-xs text-muted-foreground">{template.description}</p>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Настройки генерации</DialogTitle>
+            <DialogDescription>Применяются к следующей генерации прототипа.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Стек результата</p>
+              <div className="mt-2 grid gap-1.5">
+                {FRAMEWORKS.map((framework) => (
+                  <button key={framework.id} type="button" onClick={() => setOptions((prev) => ({ ...prev, framework: framework.id }))} className={`rounded-lg border px-3 py-2.5 text-left transition-all ${options.framework === framework.id ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}>
+                    <span className="block text-sm font-medium">{framework.label}</span>
+                    <span className="block text-xs text-muted-foreground">{framework.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+              <span><span className="block text-sm font-medium">Улучшить и восстановить текст</span><span className="block text-xs text-muted-foreground">Заменяет размытый текст и Lorem Ipsum</span></span>
+              <Switch checked={options.enhanceText} onCheckedChange={(v) => setOptions((prev) => ({ ...prev, enhanceText: v }))} />
+            </label>
+            <label className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+              <span><span className="block text-sm font-medium">Переключатель тем</span><span className="block text-xs text-muted-foreground">Светлая / тёмная тема в прототипе</span></span>
+              <Switch checked={options.themeToggle} onCheckedChange={(v) => setOptions((prev) => ({ ...prev, themeToggle: v }))} />
+            </label>
+            <Button variant="secondary" className="w-full" onClick={() => { setOptions({ ...DEFAULT_OPTIONS, framework: options.framework }); toast.success("Настройки сброшены"); }}>Сбросить дизайн-токены</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Как это работает</DialogTitle>
+            <DialogDescription>От скриншота до интерактивной страницы за четыре шага.</DialogDescription>
+          </DialogHeader>
+          <ol className="space-y-3 text-sm">
+            <li><strong>1. Загрузите макет.</strong> До 3 экранов: PNG, JPG или WEBP, до 10 МБ каждый.</li>
+            <li><strong>2. Настройте дизайн-систему.</strong> Стек (HTML, React, Vue), цвета, шрифт, радиусы, тени — или примените готовый шаблон.</li>
+            <li><strong>3. Сгенерируйте прототип.</strong> AI распознаёт структуру и собирает рабочую страницу с интерактивом.</li>
+            <li><strong>4. Доработайте и экспортируйте.</strong> Правки текстом, инспектор, проверка доступности, экспорт в HTML, ZIP или CodeSandbox, публичная ссылка.</li>
+          </ol>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
