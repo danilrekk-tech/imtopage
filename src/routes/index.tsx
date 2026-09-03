@@ -191,11 +191,12 @@ function Index() {
         <div className="sidebar-section">
           <Link to="/" className="sidebar-item sidebar-active"><Sparkles className="size-4" /> Новый прототип</Link>
           <Link to="/projects" className="sidebar-item"><FolderKanban className="size-4" /> Мои проекты</Link>
-          <button className="sidebar-item"><LayoutTemplate className="size-4" /> Шаблоны дизайна</button>
-          <button className="sidebar-item"><Palette className="size-4" /> Дизайн-токены</button>
-          <button className="sidebar-item"><History className="size-4" /> История генераций</button>
-          <button className="sidebar-item"><Download className="size-4" /> Экспорт кода</button>
-          <button className="sidebar-item"><Settings2 className="size-4" /> Настройки</button>
+          <button className="sidebar-item" onClick={() => setTemplatesOpen(true)}><LayoutTemplate className="size-4" /> Шаблоны дизайна</button>
+          <button className="sidebar-item" onClick={scrollToTokens}><Palette className="size-4" /> Дизайн-токены</button>
+          <Link to="/projects" className="sidebar-item"><History className="size-4" /> История генераций</Link>
+          <button className="sidebar-item" onClick={exportCode}><Download className="size-4" /> Экспорт кода</button>
+          <button className="sidebar-item" onClick={() => setSettingsOpen(true)}><Settings2 className="size-4" /> Настройки</button>
+
         </div>
         <div className="sidebar-divider" />
         <div className="sidebar-help">
