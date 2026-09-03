@@ -263,6 +263,75 @@ function Index() {
           </div>
         </section>
       </main>
+
+      <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Шаблоны дизайна</DialogTitle>
+            <DialogDescription>Один клик — и цвета, шрифт, радиусы и тени применятся к следующей генерации.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {DESIGN_TEMPLATES.map((template) => (
+              <button key={template.id} type="button" onClick={() => applyTemplate(template.id)} className="rounded-xl border border-border p-3 text-left transition-colors hover:border-primary hover:bg-secondary/40">
+                <div className="flex items-center gap-1.5">
+                  {[template.options.primaryColor, template.options.secondaryColor, template.options.backgroundColor, template.options.surfaceColor, template.options.borderColor].map((color, i) => (
+                    <span key={`${template.id}-${i}`} className="size-5 rounded-md border border-white/10" style={{ backgroundColor: color }} />
+                  ))}
+                </div>
+                <p className="mt-2 text-sm font-semibold">{template.name}</p>
+                <p className="text-xs text-muted-foreground">{template.description}</p>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Настройки генерации</DialogTitle>
+            <DialogDescription>Применяются к следующей генерации прототипа.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Стек результата</p>
+              <div className="mt-2 grid gap-1.5">
+                {FRAMEWORKS.map((framework) => (
+                  <button key={framework.id} type="button" onClick={() => setOptions((prev) => ({ ...prev, framework: framework.id }))} className={`rounded-lg border px-3 py-2.5 text-left transition-all ${options.framework === framework.id ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}>
+                    <span className="block text-sm font-medium">{framework.label}</span>
+                    <span className="block text-xs text-muted-foreground">{framework.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+              <span><span className="block text-sm font-medium">Улучшить и восстановить текст</span><span className="block text-xs text-muted-foreground">Заменяет размытый текст и Lorem Ipsum</span></span>
+              <Switch checked={options.enhanceText} onCheckedChange={(v) => setOptions((prev) => ({ ...prev, enhanceText: v }))} />
+            </label>
+            <label className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+              <span><span className="block text-sm font-medium">Переключатель тем</span><span className="block text-xs text-muted-foreground">Светлая / тёмная тема в прототипе</span></span>
+              <Switch checked={options.themeToggle} onCheckedChange={(v) => setOptions((prev) => ({ ...prev, themeToggle: v }))} />
+            </label>
+            <Button variant="secondary" className="w-full" onClick={() => { setOptions({ ...DEFAULT_OPTIONS, framework: options.framework }); toast.success("Настройки сброшены"); }}>Сбросить дизайн-токены</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Как это работает</DialogTitle>
+            <DialogDescription>От скриншота до интерактивной страницы за четыре шага.</DialogDescription>
+          </DialogHeader>
+          <ol className="space-y-3 text-sm">
+            <li><strong>1. Загрузите макет.</strong> До 3 экранов: PNG, JPG или WEBP, до 10 МБ каждый.</li>
+            <li><strong>2. Настройте дизайн-систему.</strong> Стек (HTML, React, Vue), цвета, шрифт, радиусы, тени — или примените готовый шаблон.</li>
+            <li><strong>3. Сгенерируйте прототип.</strong> AI распознаёт структуру и собирает рабочую страницу с интерактивом.</li>
+            <li><strong>4. Доработайте и экспортируйте.</strong> Правки текстом, инспектор, проверка доступности, экспорт в HTML, ZIP или CodeSandbox, публичная ссылка.</li>
+          </ol>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
