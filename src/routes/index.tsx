@@ -218,11 +218,6 @@ function Index() {
             <div className="eyebrow"><Sparkles className="size-3.5" /> AI WORKSPACE</div>
             <h2>Превратите макет в<br /><span>интерактивный прототип</span></h2>
             <p>Загрузите макет, выберите технологии, настройте параметры и получите живую страницу, готовую к передаче разработчику.</p>
-            <div className="hero-stats">
-              <div><span className="stat-icon"><PanelLeft className="size-4" /></span><strong>До 3 экранов</strong><small>за один раз</small></div>
-              <div><span className="stat-icon cyan"><Code2 className="size-4" /></span><strong>Готово к коду</strong><small>чистый экспорт</small></div>
-              <div><span className="stat-icon amber"><Sparkles className="size-4" /></span><strong>Точно и быстро</strong><small>AI + дизайн-токены</small></div>
-            </div>
           </div>
           <div className="hero-visual-wrap"><img src={heroVisual.url} alt="Графика Image to Interactive" className="hero-visual" /></div>
         </section>
