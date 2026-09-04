@@ -500,3 +500,153 @@ export async function signedUrl(path: string | null): Promise<string | null> {
     .createSignedUrl(path, 60 * 60);
   return data?.signedUrl ?? null;
 }
+
+/* ================= Режим «Точное воспроизведение дизайна» =================
+ * Возвращает произвольный текст (Reconstruction Prompt), а не HTML.
+ * Использует ту же цепочку провайдеров и тот же backoff.
+ * ========================================================================*/
+
+async function rawGemini(content: Content[], system: string): Promise<string> {
+  const { GEMINI_MODELS, geminiGenerationConfig, markHealth } = await import("./health.server");
+  const key = process.env["GEMINI_API_KEY"];
+  if (!key) throw new ProviderError("GEMINI_API_KEY не задан.", true);
+
+  const parts = content.map((item) => {
+    if (item.type === "text") return { text: item.text };
+    const match = /^data:(.+?);base64,(.+)$/.exec(item.image_url.url);
+    if (!match) throw new ProviderError("Gemini принимает только base64-изображения.", true);
+    return { inlineData: { mimeType: match[1]!, data: match[2]! } };
+  });
+
+  let lastError = "Gemini недоступен.";
+  for (const model of GEMINI_MODELS) {
+    const res = await fetchWithBackoff(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: "user", parts }],
+          generationConfig: geminiGenerationConfig(model, 32000),
+        }),
+      },
+      `Gemini (${model})`,
+    ).catch((error: unknown) => error as Error);
+    if (res instanceof Error) { lastError = res.message; continue; }
+    if (!res.ok) { lastError = `Gemini (${model}) ошибка ${res.status}`; continue; }
+    const json = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+    const text = (json.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
+    if (text) { await markHealth("gemini", "up", model, null); return text; }
+    lastError = `Gemini (${model}) вернул пустой ответ.`;
+  }
+  throw new ProviderError(lastError, true);
+}
+
+async function rawOpenRouter(content: Content[], system: string): Promise<string> {
+  const { OPENROUTER_MODELS, markHealth } = await import("./health.server");
+  const key = process.env["OPENROUTER_API_KEY"];
+  if (!key) throw new ProviderError("OPENROUTER_API_KEY не задан.", true);
+
+  let lastError = "OpenRouter недоступен.";
+  for (const model of OPENROUTER_MODELS) {
+    const res = await fetchWithBackoff(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+          "HTTP-Referer": "https://imtopage.lovable.app",
+          "X-Title": "Image to Interactive Page",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 16000,
+          temperature: 0.1,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content },
+          ],
+        }),
+      },
+      `OpenRouter (${model})`,
+    ).catch((error: unknown) => error as Error);
+    if (res instanceof Error) { lastError = res.message; continue; }
+    if (!res.ok) { lastError = `OpenRouter ошибка ${res.status}`; continue; }
+    const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const text = (json.choices?.[0]?.message?.content ?? "").trim();
+    if (text) { await markHealth("openrouter", "up", model, null); return text; }
+    lastError = `OpenRouter (${model}) вернул пустой ответ.`;
+  }
+  throw new ProviderError(lastError, true);
+}
+
+async function rawLovable(content: Content[], system: string): Promise<string> {
+  const { markHealth } = await import("./health.server");
+  const key = process.env["LOVABLE_API_KEY"];
+  if (!key) throw new ProviderError("Отсутствует ключ шлюза Lovable.", false);
+
+  const res = await fetchWithBackoff(
+    "https://ai.gateway.lovable.dev/v1/chat/completions",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Lovable-API-Key": key },
+      body: JSON.stringify({
+        model: "google/gemini-3.6-flash",
+        max_tokens: 32000,
+        temperature: 0.1,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content },
+        ],
+      }),
+    },
+    "Lovable AI",
+  );
+  if (!res.ok) {
+    const detail = (await res.text()).slice(0, 200);
+    if (res.status === 402) throw new ProviderError("Закончились AI-кредиты рабочего пространства.", false);
+    throw new ProviderError(`Ошибка AI (${res.status}): ${detail}`, false);
+  }
+  const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  const text = (json.choices?.[0]?.message?.content ?? "").trim();
+  if (!text) throw new ProviderError("AI вернул пустой ответ.", true);
+  await markHealth("lovable", "up", "google/gemini-3.6-flash", null);
+  return text;
+}
+
+/** Текстовый вызов AI по цепочке провайдеров с произвольным системным промтом. */
+export async function callText(
+  content: Content[],
+  system: string,
+): Promise<{ text: string; provider: ProviderName }> {
+  const { healthyFirst } = await import("./health.server");
+  const mode = providerMode();
+
+  const runners: Record<"gemini" | "openrouter" | "lovable", { name: ProviderName; run: () => Promise<string> }> = {
+    gemini: { name: "gemini", run: () => rawGemini(content, system) },
+    openrouter: { name: "openrouter_fallback", run: () => rawOpenRouter(content, system) },
+    lovable: { name: "lovable_fallback", run: () => rawLovable(content, system) },
+  };
+
+  let order: ("gemini" | "openrouter" | "lovable")[];
+  if (mode === "gemini_only") order = ["gemini"];
+  else if (mode === "lovable_only") order = ["lovable", "gemini", "openrouter"];
+  else order = await healthyFirst(["gemini", "openrouter", "lovable"]);
+
+  const errors: string[] = [];
+  for (const key of order) {
+    const { name, run } = runners[key];
+    try {
+      const text = await run();
+      console.info(`[reconstruct] provider ${name}`);
+      return { text, provider: name };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `${key} недоступен.`;
+      console.warn(`[reconstruct] ${key} failed:`, message);
+      errors.push(`${key}: ${message}`);
+    }
+  }
+  throw new Error(`Все AI-провайдеры недоступны. Детали: ${errors.join(" | ")}`);
+}

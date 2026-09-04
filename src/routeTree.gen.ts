@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as ReconstructRouteImport } from './routes/reconstruct'
 import { Route as PProjectIdRouteImport } from './routes/p.$projectId'
 import { Route as STokenRouteImport } from './routes/s.$token'
 
@@ -30,6 +31,11 @@ const ProjectsRoute = ProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReconstructRoute = ReconstructRouteImport.update({
+  id: '/reconstruct',
+  path: '/reconstruct',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PProjectIdRoute = PProjectIdRouteImport.update({
   id: '/p/$projectId',
   path: '/p/$projectId',
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/projects': typeof ProjectsRoute
+  '/reconstruct': typeof ReconstructRoute
   '/p/$projectId': typeof PProjectIdRoute
   '/s/$token': typeof STokenRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/projects': typeof ProjectsRoute
+  '/reconstruct': typeof ReconstructRoute
   '/p/$projectId': typeof PProjectIdRoute
   '/s/$token': typeof STokenRoute
 }
@@ -60,21 +68,32 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/projects': typeof ProjectsRoute
+  '/reconstruct': typeof ReconstructRoute
   '/p/$projectId': typeof PProjectIdRoute
   '/s/$token': typeof STokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/projects' | '/p/$projectId' | '/s/$token'
+  fullPaths:
+    '/' | '/auth' | '/projects' | '/reconstruct' | '/p/$projectId' | '/s/$token'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/projects' | '/p/$projectId' | '/s/$token'
-  id: '__root__' | '/' | '/auth' | '/projects' | '/p/$projectId' | '/s/$token'
+  to:
+    '/' | '/auth' | '/projects' | '/reconstruct' | '/p/$projectId' | '/s/$token'
+  id:
+    | '__root__'
+    | '/'
+    | '/auth'
+    | '/projects'
+    | '/reconstruct'
+    | '/p/$projectId'
+    | '/s/$token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
   ProjectsRoute: typeof ProjectsRoute
+  ReconstructRoute: typeof ReconstructRoute
   PProjectIdRoute: typeof PProjectIdRoute
   STokenRoute: typeof STokenRoute
 }
@@ -102,6 +121,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reconstruct': {
+      id: '/reconstruct'
+      path: '/reconstruct'
+      fullPath: '/reconstruct'
+      preLoaderRoute: typeof ReconstructRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/p/$projectId': {
       id: '/p/$projectId'
       path: '/p/$projectId'
@@ -123,6 +149,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
   ProjectsRoute: ProjectsRoute,
+  ReconstructRoute: ReconstructRoute,
   PProjectIdRoute: PProjectIdRoute,
   STokenRoute: STokenRoute,
 }

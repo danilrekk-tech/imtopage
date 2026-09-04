@@ -275,3 +275,48 @@ export const getProject = createServerFn({ method: "POST" })
       image_url: await signedUrl(project.source_image_url),
     };
   });
+
+/* ============ Режим «Точное воспроизведение дизайна» ============ */
+
+const ReconstructInput = z.object({
+  images: z.array(z.string().min(50)).min(1).max(3),
+  deviceId: z.string().min(1),
+  target: z.enum(["lovable", "cursor", "claude-code", "v0", "generic"]).default("lovable"),
+  depth: z.enum(["analysis", "prompt"]).default("prompt"),
+  note: z.string().max(1000).optional(),
+});
+
+export const reconstructPrompt = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => ReconstructInput.parse(input))
+  .handler(async ({ data }) => {
+    const { optionalUserId, trackUsage, assertRateLimit, requestSubject, callText } = await import(
+      "./generate.server"
+    );
+    const { buildReconstructionSystemPrompt, buildReconstructionUserText } = await import(
+      "./reconstruction"
+    );
+
+    const userId = await optionalUserId();
+    await assertRateLimit(requestSubject(userId, data.deviceId));
+    await trackUsage(userId);
+
+    for (const raw of data.images) {
+      if (!/^data:image\/[a-zA-Z+]+;base64,.+$/.test(raw)) {
+        throw new Error("Неверный формат изображения. Загрузите PNG, JPG или WEBP.");
+      }
+    }
+
+    const system = buildReconstructionSystemPrompt(data.target, data.depth);
+    const { text, provider } = await callText(
+      [
+        {
+          type: "text" as const,
+          text: buildReconstructionUserText(data.target, data.depth, data.images.length, data.note),
+        },
+        ...data.images.map((url) => ({ type: "image_url" as const, image_url: { url } })),
+      ],
+      system,
+    );
+
+    return { prompt: text, provider, target: data.target, depth: data.depth };
+  });
