@@ -86,6 +86,7 @@ function Reconstruct() {
     },
     onSuccess: (data) => {
       setResult({ prompt: data.prompt, provider: data.provider });
+      setProto(null);
       toast.success("Reconstruction Prompt готов");
     },
     onError: (error: Error) => toast.error(error.message),
@@ -117,6 +118,7 @@ function Reconstruct() {
       setFiles((prev) => [...prev, ...loaded].slice(0, 3));
       setActive(0);
       setResult(null);
+      setProto(null);
     });
   }, []);
 
