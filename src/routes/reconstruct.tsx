@@ -23,7 +23,10 @@ import { Input } from "@/components/ui/input";
 import { Disclaimer } from "@/components/Disclaimer";
 import { ProviderBadge } from "@/components/ProviderBadge";
 import { getDeviceId } from "@/lib/device";
-import { reconstructPrompt } from "@/lib/generate.functions";
+import { prototypeFromReconstruction, reconstructPrompt } from "@/lib/generate.functions";
+import { PreviewFrame } from "@/components/PreviewFrame";
+import { openHtmlInNewWindow } from "@/lib/preview-window";
+
 import {
   DEFAULT_RECONSTRUCTION_DEPTH,
   DEFAULT_RECONSTRUCTION_TARGET,
