@@ -449,7 +449,56 @@ function Reconstruct() {
                     {busy ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />} Создать
                     prompt заново
                   </Button>
+                  <Button size="sm" disabled={build.isPending} onClick={() => build.mutate()}>
+                    {build.isPending ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin" /> Собираю прототип…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="size-3.5" /> Создать прототип по промту
+                      </>
+                    )}
+                  </Button>
                 </div>
+
+                {proto && (
+                  <div className="mt-4 rounded-xl border border-border bg-secondary/20 p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Прототип по Reconstruction Prompt
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            try {
+                              openHtmlInNewWindow(proto.html, "Прототип");
+                            } catch (error) {
+                              toast.error((error as Error).message);
+                            }
+                          }}
+                        >
+                          Открыть в новой вкладке
+                        </Button>
+                        <Link to="/p/$projectId" params={{ projectId: proto.projectId }}>
+                          <Button size="sm">Открыть в редакторе</Button>
+                        </Link>
+                      </div>
+                    </div>
+                    <PreviewFrame
+                      html={proto.html}
+                      mode="off"
+                      onHtmlChange={(html) => setProto((prev) => (prev ? { ...prev, html } : prev))}
+                      className="h-[70vh] w-full rounded-lg border border-border bg-white"
+                    />
+                    <div className="mt-2">
+                      <ProviderBadge used={proto.provider} />
+                    </div>
+                  </div>
+                )}
+
 
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <ProviderBadge used={result.provider} />
