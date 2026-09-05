@@ -20,6 +20,7 @@ import {
   PanelLeft,
   Plus,
   Rocket,
+  ScanEye,
   Settings2,
   Sparkles,
   SplitSquareHorizontal,
@@ -193,6 +194,7 @@ function Index() {
           <Link to="/projects" className="sidebar-item"><FolderKanban className="size-4" /> Мои проекты</Link>
           <button className="sidebar-item" onClick={() => setTemplatesOpen(true)}><LayoutTemplate className="size-4" /> Шаблоны дизайна</button>
           <button className="sidebar-item" onClick={scrollToTokens}><Palette className="size-4" /> Дизайн-токены</button>
+          <Link to="/reconstruct" className="sidebar-item"><ScanEye className="size-4" /> Точное воспроизведение</Link>
           <Link to="/projects" className="sidebar-item"><History className="size-4" /> История генераций</Link>
           <button className="sidebar-item" onClick={exportCode}><Download className="size-4" /> Экспорт кода</button>
           <button className="sidebar-item" onClick={() => setSettingsOpen(true)}><Settings2 className="size-4" /> Настройки</button>
