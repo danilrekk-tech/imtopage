@@ -70,7 +70,9 @@ function Reconstruct() {
   const [active, setActive] = useState(0);
   const [copied, setCopied] = useState(false);
   const [result, setResult] = useState<{ prompt: string; provider?: string } | null>(null);
+  const [proto, setProto] = useState<{ html: string; projectId: string; provider?: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
 
   useEffect(() => setDeviceId(getDeviceId()), []);
 
