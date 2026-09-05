@@ -320,3 +320,84 @@ export const reconstructPrompt = createServerFn({ method: "POST" })
 
     return { prompt: text, provider, target: data.target, depth: data.depth };
   });
+
+/* ====== Прототип на основе Reconstruction Prompt ====== */
+
+const PrototypeFromPromptInput = z.object({
+  images: z.array(z.string().min(50)).min(1).max(3),
+  deviceId: z.string().min(1),
+  prompt: z.string().min(50).max(60000),
+  fileName: z.string().default("reconstruction.png"),
+});
+
+export const prototypeFromReconstruction = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => PrototypeFromPromptInput.parse(input))
+  .handler(async ({ data }) => {
+    const { admin, optionalUserId, trackUsage, callModel, log, assertRateLimit, requestSubject } =
+      await import("./generate.server");
+    const db = admin();
+    const userId = await optionalUserId();
+    await assertRateLimit(requestSubject(userId, data.deviceId));
+    await trackUsage(userId);
+
+    const parsedImages = data.images.map((raw) => {
+      const match = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(raw);
+      if (!match) throw new Error("Неверный формат изображения. Загрузите PNG или JPG.");
+      const mime = match[1]!;
+      const bytes = Uint8Array.from(atob(match[2]!), (c) => c.charCodeAt(0));
+      if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("Файл больше 10 МБ.");
+      return { raw, mime, bytes };
+    });
+    const first = parsedImages[0]!;
+
+    const ext = first.mime.split("/")[1] === "jpeg" ? "jpg" : (first.mime.split("/")[1] ?? "png");
+    const path = `${userId ?? `guest/${data.deviceId}`}/${crypto.randomUUID()}.${ext}`;
+    await db.storage.from("screenshots").upload(path, first.bytes, { contentType: first.mime });
+
+    const { data: project, error: insertError } = await db
+      .from("projects")
+      .insert({
+        user_id: userId,
+        device_id: data.deviceId,
+        source_image_url: path,
+        title:
+          (data.fileName.replace(/\.[^.]+$/, "").slice(0, 70) || "Точное воспроизведение") + " · копия",
+        status: "processing",
+      })
+      .select("id")
+      .single();
+    if (insertError || !project) throw new Error("Не удалось создать проект.");
+
+    await log(project.id, "upload", "completed");
+
+    try {
+      await log(project.id, "analyze", "started");
+      const { html, analysis, provider } = await callModel([
+        {
+          type: "text",
+          text:
+            "Воссоздай дизайн со скриншота как единый интерактивный HTML-документ, строго следуя приведённому ниже Reconstruction Prompt. " +
+            "Приоритет: VISUAL FIDELITY > DESIGN INTERPRETATION. Не улучшай и не переосмысливай дизайн.\n\n" +
+            "=== RECONSTRUCTION PROMPT ===\n" +
+            data.prompt,
+        },
+        ...parsedImages.map((img) => ({ type: "image_url" as const, image_url: { url: img.raw } })),
+      ]);
+
+      await db
+        .from("projects")
+        .update({
+          generated_html: html,
+          component_map: { analysis, provider, source: "reconstruction" },
+          status: "completed",
+        })
+        .eq("id", project.id);
+      await log(project.id, "generate", "completed", provider);
+      return { projectId: project.id, html, analysis, provider };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Неизвестная ошибка";
+      await db.from("projects").update({ status: "failed" }).eq("id", project.id);
+      await log(project.id, "generate", "failed", message);
+      throw new Error(message);
+    }
+  });
