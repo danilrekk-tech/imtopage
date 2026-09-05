@@ -138,7 +138,28 @@ function Reconstruct() {
     URL.revokeObjectURL(url);
   };
 
+  const buildProto = useServerFn(prototypeFromReconstruction);
+  const build = useMutation({
+    mutationFn: async () => {
+      if (!result) throw new Error("Сначала сформируйте prompt.");
+      return buildProto({
+        data: {
+          images: files.map((f) => f.dataUrl),
+          deviceId,
+          prompt: result.prompt,
+          fileName: files[0]?.name ?? "reconstruction.png",
+        },
+      });
+    },
+    onSuccess: (data) => {
+      setProto({ html: data.html, projectId: data.projectId, provider: data.provider });
+      toast.success("Прототип собран по Reconstruction Prompt");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const busy = generate.isPending;
+
 
   return (
     <div className="app-shell">
